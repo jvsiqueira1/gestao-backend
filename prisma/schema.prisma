@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  Int        @id @default(autoincrement())
+  name                String
+  email               String     @unique
+  password            String?
+  subscription_status String?    @default("trialing")
+  plan                String?    @default("free")
+  trial_end           DateTime?
+  created_at          DateTime   @default(now())
+  updated_at          DateTime?  @updatedAt
+  stripe_customer_id  String?
+  categories          Category[]
+  expenses            Expense[]
+  incomes             Income[]
+  financialGoals      FinancialGoal[]
+
+  @@map("users")
+}
+
+model Category {
+  id         Int       @id @default(autoincrement())
+  name       String
+  type       String
+  user_id    Int
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  user       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  expenses   Expense[]
+  incomes    Income[]
+
+  @@unique([user_id, name])
+  @@map("category")
+}
+
+model Income {
+  id          Int       @id @default(autoincrement())
+  description String
+  value       Float
+  date        DateTime
+  user_id     Int
+  category_id Int?
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+  category    Category? @relation(fields: [category_id], references: [id])
+  user        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("income")
+}
+
+model Expense {
+  id          Int       @id @default(autoincrement())
+  description String
+  value       Float
+  date        DateTime
+  user_id     Int
+  category_id Int?
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+  category    Category? @relation(fields: [category_id], references: [id])
+  user        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("expense")
+}
+
+model FinancialGoal {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  name        String
+  description String?
+  target      Float
+  saved       Float    @default(0)
+  deadline    DateTime?
+  status      String   @default("active")
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
