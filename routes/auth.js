@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const prisma = require('../lib/prisma');
 const authMiddleware = require('../middleware/authMiddleware');
 const nodemailer = require('nodemailer');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const router = express.Router();
 
@@ -78,6 +79,19 @@ router.post('/register', async (req, res) => {
         trial_end: true,
         plan: true
       }
+    });
+    
+    // Cria o cliente no Stripe
+    const stripeCustomer = await stripe.customers.create({
+      name,
+      email,
+      metadata: { user_id: user.id.toString() }
+    });
+    
+    // Atualiza o usuário com o stripe_customer_id
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { stripe_customer_id: stripeCustomer.id }
     });
     
     // Inserir categorias padrão para o novo usuário
