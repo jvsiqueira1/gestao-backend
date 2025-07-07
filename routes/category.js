@@ -11,8 +11,14 @@ const categoryCache = new LRUCache({ max: 100, ttl: 1000 * 60 * 5 });
 router.get('/', authMiddleware, async (req, res) => {
   const { type } = req.query; // income ou expense
   const cacheKey = `category:${req.user.id}:${type || ''}`;
+  console.log('Buscando categorias:', { userId: req.user.id, type, cacheKey });
+  
   const cached = categoryCache.get(cacheKey);
-  if (cached) return res.json(cached);
+  if (cached) {
+    console.log('Retornando dados do cache:', cached.length, 'categorias');
+    return res.json(cached);
+  }
+  
   try {
     const where = {
       user_id: req.user.id
@@ -22,6 +28,8 @@ router.get('/', authMiddleware, async (req, res) => {
       where.type = type;
     }
     
+    console.log('Query where:', where);
+    
     const categories = await prisma.category.findMany({
       where,
       orderBy: {
@@ -29,6 +37,7 @@ router.get('/', authMiddleware, async (req, res) => {
       }
     });
     
+    console.log('Categorias encontradas:', categories.length);
     categoryCache.set(cacheKey, categories);
     res.json(categories);
   } catch (err) {
@@ -40,9 +49,13 @@ router.get('/', authMiddleware, async (req, res) => {
 // Criar nova categoria
 router.post('/', authMiddleware, async (req, res) => {
   const { name, type } = req.body;
+  console.log('Tentando criar categoria:', { name, type, userId: req.user.id });
+  
   if (!name || !type) {
+    console.log('Dados inválidos:', { name, type });
     return res.status(400).json({ error: 'Nome e tipo são obrigatórios.' });
   }
+  
   try {
     const category = await prisma.category.create({
       data: {
@@ -51,6 +64,17 @@ router.post('/', authMiddleware, async (req, res) => {
         user_id: req.user.id
       }
     });
+    
+    console.log('Categoria criada com sucesso:', category);
+    
+    // Limpar cache para este usuário
+    const cacheKeys = categoryCache.keys();
+    cacheKeys.forEach(key => {
+      if (key.includes(`category:${req.user.id}`)) {
+        categoryCache.delete(key);
+      }
+    });
+    
     res.status(201).json(category);
   } catch (err) {
     console.error('Erro ao criar categoria:', err);
