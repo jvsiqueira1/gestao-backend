@@ -3,10 +3,47 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../lib/prisma');
 const authMiddleware = require('../middleware/authMiddleware');
+const nodemailer = require('nodemailer');
 
 const router = express.Router();
 
-// Registro de usuário
+const transporter = nodemailer.createTransport({
+  host: 'smtp.zoho.com',
+  port: 465,
+  secure: true,
+  auth: {
+    user: process.env.ZOHO_USER,
+    pass: process.env.ZOHO_PASS,
+  },
+});
+
+async function sendWelcomeEmail(to, nome) {
+  await transporter.sendMail({
+    from: `"Gestão de Gastos" <${process.env.ZOHO_USER}>`,
+    to,
+    subject: 'Bem-vindo ao Gestão de Gastos!',
+    html: `
+      <div style="font-family: 'Segoe UI', Arial, sans-serif; background: #f8fafc; padding: 32px; color: #222;">
+        <div style="max-width: 480px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px #0001; padding: 32px;">
+          <h2 style="color: #0e7490; margin-bottom: 16px;">Olá, ${nome}!</h2>
+          <p style="font-size: 1.1em; margin-bottom: 16px;">Sua conta foi criada com sucesso no <b>Gestão de Gastos</b>!</p>
+          <p style="margin-bottom: 24px;">Aproveite o período de teste gratuito para conhecer todos os recursos premium: dashboard, relatórios, exportação de dados e muito mais.</p>
+          <a href="https://gestao.jvsdev.com.br/profile" style="display: inline-block; background: #0e7490; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; font-size: 1.1em; margin-bottom: 16px;">Acessar Perfil</a>
+          <ul style="margin: 32px 0 16px 0; padding: 0; list-style: none;">
+            <li style="margin-bottom: 8px;"><span style="color: #22c55e; font-weight: bold;">✓</span> Dashboard completo</li>
+            <li style="margin-bottom: 8px;"><span style="color: #22c55e; font-weight: bold;">✓</span> Categorização de despesas</li>
+            <li style="margin-bottom: 8px;"><span style="color: #22c55e; font-weight: bold;">✓</span> Relatórios detalhados</li>
+            <li style="margin-bottom: 8px;"><span style="color: #22c55e; font-weight: bold;">✓</span> Exportação de dados</li>
+            <li style="margin-bottom: 8px;"><span style="color: #22c55e; font-weight: bold;">✓</span> Suporte prioritário</li>
+          </ul>
+          <p style="font-size: 0.95em; color: #666; margin-top: 24px;">Dúvidas? Responda este e-mail ou acesse o perfil para suporte.</p>
+          <div style="margin-top: 32px; text-align: center; color: #aaa; font-size: 0.9em;">Equipe Gestão de Gastos</div>
+        </div>
+      </div>
+    `,
+  });
+}
+
 router.post('/register', async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
@@ -76,6 +113,8 @@ router.post('/register', async (req, res) => {
     );
     
     await Promise.all(insertPromises);
+    
+    await sendWelcomeEmail(user.email, user.name);
     
     res.status(201).json(user);
   } catch (err) {

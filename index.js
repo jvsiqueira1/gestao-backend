@@ -41,6 +41,9 @@ app.use('/api/stripe', stripeRoutes);
 const goalRoutes = require('./routes/goal');
 app.use('/api/goal', goalRoutes);
 
+const contactRoutes = require('./routes/contact');
+app.use('/api/contact', contactRoutes);
+
 app.get('/', (req, res) => {
   res.send('API de Gestão de Gastos Pessoais rodando!');
 });
