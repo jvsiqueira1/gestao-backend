@@ -9,14 +9,15 @@ const categoryCache = new LRUCache({ max: 100, ttl: 1000 * 60 * 5 });
 
 // Listar categorias do usuário (por tipo)
 router.get('/', authMiddleware, async (req, res) => {
-  const { type } = req.query; // income ou expense
+  const { type, _refresh } = req.query; // income ou expense
   const cacheKey = `category:${req.user.id}:${type || ''}`;
-  console.log('Buscando categorias:', { userId: req.user.id, type, cacheKey });
   
-  const cached = categoryCache.get(cacheKey);
-  if (cached) {
-    console.log('Retornando dados do cache:', cached.length, 'categorias');
-    return res.json(cached);
+  // Se _refresh estiver presente, ignorar cache
+  if (!_refresh) {
+    const cached = categoryCache.get(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
   }
   
   try {
@@ -28,8 +29,6 @@ router.get('/', authMiddleware, async (req, res) => {
       where.type = type;
     }
     
-    console.log('Query where:', where);
-    
     const categories = await prisma.category.findMany({
       where,
       orderBy: {
@@ -37,8 +36,12 @@ router.get('/', authMiddleware, async (req, res) => {
       }
     });
     
-    console.log('Categorias encontradas:', categories.length);
     categoryCache.set(cacheKey, categories);
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
     res.json(categories);
   } catch (err) {
     console.error('Erro ao buscar categorias:', err);
@@ -49,10 +52,8 @@ router.get('/', authMiddleware, async (req, res) => {
 // Criar nova categoria
 router.post('/', authMiddleware, async (req, res) => {
   const { name, type } = req.body;
-  console.log('Tentando criar categoria:', { name, type, userId: req.user.id });
   
   if (!name || !type) {
-    console.log('Dados inválidos:', { name, type });
     return res.status(400).json({ error: 'Nome e tipo são obrigatórios.' });
   }
   
@@ -65,8 +66,6 @@ router.post('/', authMiddleware, async (req, res) => {
       }
     });
     
-    console.log('Categoria criada com sucesso:', category);
-    
     // Limpar cache para este usuário
     const cacheKeys = categoryCache.keys();
     cacheKeys.forEach(key => {
@@ -78,6 +77,7 @@ router.post('/', authMiddleware, async (req, res) => {
     res.status(201).json(category);
   } catch (err) {
     console.error('Erro ao criar categoria:', err);
+    
     if (err.code === 'P2002') {
       return res.status(400).json({ error: 'Já existe uma categoria com este nome.' });
     }
