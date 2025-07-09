@@ -52,6 +52,11 @@ model Income {
   updated_at  DateTime  @updatedAt
   category    Category? @relation(fields: [category_id], references: [id])
   user        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  isFixed         Boolean   @default(false)
+  recurrenceType  String?   // 'monthly' ou 'yearly'
+  startDate       DateTime?
+  endDate         DateTime?
+  fixed_income_id Int? // Referência à receita fixa de origem
 
   @@map("income")
 }
@@ -67,6 +72,11 @@ model Expense {
   updated_at  DateTime  @updatedAt
   category    Category? @relation(fields: [category_id], references: [id])
   user        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  isFixed         Boolean   @default(false)
+  recurrenceType  String?   // 'monthly' ou 'yearly'
+  startDate       DateTime?
+  endDate         DateTime?
+  fixed_expense_id Int? // Referência à despesa fixa de origem
 
   @@map("expense")
 }

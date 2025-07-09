@@ -9,10 +9,26 @@ const incomeCache = new LRUCache({ max: 100, ttl: 1000 * 60 * 5 });
 const expenseCache = new LRUCache({ max: 100, ttl: 1000 * 60 * 5 });
 const dashboardCache = new LRUCache({ max: 100, ttl: 1000 * 60 * 5 });
 
+console.log('Arquivo de rotas carregado!');
+
+// Função auxiliar para montar data no formato YYYY-MM-DDT00:00:00
+function makeLocalDate(year, month, day) {
+  // month: 1-based (1=Jan)
+  const mm = String(month).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+  return new Date(`${year}-${mm}-${dd}T00:00:00`);
+}
+// Função auxiliar para parsear string 'YYYY-MM-DD'
+function parseDateString(dateStr) {
+  if (!dateStr) return null;
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return { year, month, day };
+}
+
 // Listar rendas
 router.get('/income', authMiddleware, async (req, res) => {
-  const { month, year } = req.query;
-  const cacheKey = `income:${req.user.id}:${month || ''}:${year || ''}`;
+  const { month, year, fixed } = req.query;
+  const cacheKey = `income:${req.user.id}:${month || ''}:${year || ''}:${fixed || ''}`;
   const cached = incomeCache.get(cacheKey);
   if (cached) return res.json(cached);
   
@@ -21,14 +37,21 @@ router.get('/income', authMiddleware, async (req, res) => {
       user_id: req.user.id
     };
 
-    // Adicionar filtros de data se fornecidos
+    if (fixed === '1') {
+      where.isFixed = true;
+    }
+
+    let startDate, endDate;
     if (month && year) {
+      startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+      endDate = new Date(parseInt(year), parseInt(month), 1);
       where.date = {
-        gte: new Date(parseInt(year), parseInt(month) - 1, 1),
-        lt: new Date(parseInt(year), parseInt(month), 1)
+        gte: startDate,
+        lt: endDate
       };
     }
 
+    // Buscar receitas normais do período
     const incomes = await prisma.income.findMany({
       where,
       include: {
@@ -43,14 +66,99 @@ router.get('/income', authMiddleware, async (req, res) => {
       }
     });
 
+    // Buscar receitas fixas do usuário
+    const fixedIncomes = await prisma.income.findMany({
+      where: {
+        user_id: req.user.id,
+        isFixed: true,
+        startDate: { lte: endDate || new Date() },
+        OR: [
+          { endDate: null },
+          { endDate: { gte: startDate || new Date() } }
+        ]
+      },
+      include: {
+        category: {
+          select: { name: true }
+        }
+      }
+    });
+
+    // Verificar se já existe lançamento real para o período
+    const existingIncomeKeys = new Set(incomes.map(i => `${i.description}|${i.category_id}`));
+    const generatedFixedIncomes = (fixedIncomes || []).map(fixed => {
+      // Gerar data do lançamento fixo para o mês/ano consultado
+      let shouldAppear = false;
+      if (month && year) {
+        const recurMonth = parseInt(month);
+        const recurYear = parseInt(year);
+        const start = fixed.startDate ? new Date(fixed.startDate) : null;
+        const end = fixed.endDate ? new Date(fixed.endDate) : null;
+        const inRange = (!start || (recurYear > start.getFullYear() || (recurYear === start.getFullYear() && recurMonth >= start.getMonth() + 1))) && (!end || (recurYear < end.getFullYear() || (recurYear === end.getFullYear() && recurMonth <= end.getMonth() + 1)));
+        if (inRange) {
+          if (fixed.recurrenceType === 'monthly') shouldAppear = true;
+          if (fixed.recurrenceType === 'yearly' && start && recurMonth === start.getMonth() + 1) shouldAppear = true;
+        }
+      }
+      if (!shouldAppear) return null;
+      // Se já existe lançamento real igual (por descrição e categoria), não gerar duplicado
+      const key = `${fixed.description}|${fixed.category_id}`;
+      if (existingIncomeKeys.has(key)) return null;
+      // Gerar objeto para o mês consultado
+      return {
+        ...fixed,
+        date: startDate ? new Date(startDate) : new Date(),
+        pending: true,
+        category_name: fixed.category?.name || null
+      };
+    }).filter(Boolean);
+
+    // --- AJUSTE PARA REGISTRO DE PENDENTES COM VÍNCULO ---
+    // No GET /income
+    const existingFixedIncomeIds = new Set(incomes.map(i => i.fixed_income_id).filter(Boolean));
+    // Para receitas pendentes:
+    const generatedFixedIncomesWithLink = (fixedIncomes || []).map(fixed => {
+      let shouldAppear = false;
+      let day = 1;
+      if (fixed.startDate) {
+        day = new Date(fixed.startDate).getDate();
+      }
+      if (month && year) {
+        const recurMonth = parseInt(month);
+        const recurYear = parseInt(year);
+        const start = fixed.startDate ? new Date(fixed.startDate) : null;
+        const end = fixed.endDate ? new Date(fixed.endDate) : null;
+        const inRange = (!start || (recurYear > start.getFullYear() || (recurYear === start.getFullYear() && recurMonth >= start.getMonth() + 1))) && (!end || (recurYear < end.getFullYear() || (recurYear === end.getFullYear() && recurMonth <= end.getMonth() + 1)));
+        if (inRange) {
+          if (fixed.recurrenceType === 'monthly') shouldAppear = true;
+          if (fixed.recurrenceType === 'yearly' && start && recurMonth === start.getMonth() + 1) shouldAppear = true;
+        }
+      }
+      if (!shouldAppear) return null;
+      if (existingFixedIncomeIds.has(fixed.id)) return null;
+      const alreadyHasReal = incomes.some(i => i.isFixed && i.id === fixed.id && i.date && new Date(i.date).getFullYear() === parseInt(year) && new Date(i.date).getMonth() + 1 === parseInt(month));
+      if (alreadyHasReal) return null;
+      // Gerar data correta do pendente
+      const date = (month && year) ? makeLocalDate(parseInt(year), parseInt(month), day) : (fixed.startDate ? new Date(fixed.startDate) : new Date());
+      return {
+        ...fixed,
+        id: `pending-${fixed.id}-${month}-${year}`,
+        date,
+        pending: true,
+        category_name: fixed.category?.name || null
+      };
+    }).filter(Boolean);
+
     // Transformar dados para manter compatibilidade
     const formattedIncomes = incomes.map(income => ({
       ...income,
-      category_name: income.category?.name || null
+      category_name: income.category?.name || null,
+      pending: false
     }));
 
-    incomeCache.set(cacheKey, formattedIncomes);
-    res.json(formattedIncomes);
+    const allIncomes = [...formattedIncomes, ...generatedFixedIncomesWithLink];
+    incomeCache.set(cacheKey, allIncomes);
+    res.json(allIncomes);
   } catch (err) {
     console.error('Erro ao buscar rendas:', err);
     res.status(500).json({ error: 'Erro ao buscar rendas.' });
@@ -59,8 +167,8 @@ router.get('/income', authMiddleware, async (req, res) => {
 
 // Listar despesas
 router.get('/expense', authMiddleware, async (req, res) => {
-  const { month, year } = req.query;
-  const cacheKey = `expense:${req.user.id}:${month || ''}:${year || ''}`;
+  const { month, year, fixed } = req.query;
+  const cacheKey = `expense:${req.user.id}:${month || ''}:${year || ''}:${fixed || ''}`;
   const cached = expenseCache.get(cacheKey);
   if (cached) return res.json(cached);
   
@@ -69,14 +177,22 @@ router.get('/expense', authMiddleware, async (req, res) => {
       user_id: req.user.id
     };
 
+    if (fixed === '1') {
+      where.isFixed = true;
+    }
+
     // Adicionar filtros de data se fornecidos
+    let startDate, endDate;
     if (month && year) {
+      startDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+      endDate = new Date(parseInt(year), parseInt(month), 1);
       where.date = {
-        gte: new Date(parseInt(year), parseInt(month) - 1, 1),
-        lt: new Date(parseInt(year), parseInt(month), 1)
+        gte: startDate,
+        lt: endDate
       };
     }
 
+    // Buscar despesas normais do período
     const expenses = await prisma.expense.findMany({
       where,
       include: {
@@ -91,14 +207,69 @@ router.get('/expense', authMiddleware, async (req, res) => {
       }
     });
 
+    // Buscar despesas fixas do usuário
+    const fixedExpenses = await prisma.expense.findMany({
+      where: {
+        user_id: req.user.id,
+        isFixed: true,
+        startDate: { lte: endDate || new Date() },
+        OR: [
+          { endDate: null },
+          { endDate: { gte: startDate || new Date() } }
+        ]
+      },
+      include: {
+        category: {
+          select: { name: true }
+        }
+      }
+    });
+
+    // --- AJUSTE FINAL: Somente lógica de fixed_expense_id para pendentes ---
+    const existingFixedExpenseIds = new Set(expenses.map(i => i.fixed_expense_id).filter(Boolean));
+    // Para despesas pendentes:
+    const generatedFixedExpensesWithLink = (fixedExpenses || []).map(fixed => {
+      let shouldAppear = false;
+      let day = 1;
+      if (fixed.startDate) {
+        day = new Date(fixed.startDate).getDate();
+      }
+      if (month && year) {
+        const recurMonth = parseInt(month);
+        const recurYear = parseInt(year);
+        const start = fixed.startDate ? new Date(fixed.startDate) : null;
+        const end = fixed.endDate ? new Date(fixed.endDate) : null;
+        const inRange = (!start || (recurYear > start.getFullYear() || (recurYear === start.getFullYear() && recurMonth >= start.getMonth() + 1))) && (!end || (recurYear < end.getFullYear() || (recurYear === end.getFullYear() && recurMonth <= end.getMonth() + 1)));
+        if (inRange) {
+          if (fixed.recurrenceType === 'monthly') shouldAppear = true;
+          if (fixed.recurrenceType === 'yearly' && start && recurMonth === start.getMonth() + 1) shouldAppear = true;
+        }
+      }
+      if (!shouldAppear) return null;
+      if (existingFixedExpenseIds.has(fixed.id)) return null;
+      const alreadyHasReal = expenses.some(i => i.isFixed && i.id === fixed.id && i.date && new Date(i.date).getFullYear() === parseInt(year) && new Date(i.date).getMonth() + 1 === parseInt(month));
+      if (alreadyHasReal) return null;
+      // Gerar data correta do pendente
+      const date = (month && year) ? makeLocalDate(parseInt(year), parseInt(month), day) : (fixed.startDate ? new Date(fixed.startDate) : new Date());
+      return {
+        ...fixed,
+        id: `pending-${fixed.id}-${month}-${year}`,
+        date,
+        pending: true,
+        category_name: fixed.category?.name || null
+      };
+    }).filter(Boolean);
+
     // Transformar dados para manter compatibilidade
     const formattedExpenses = expenses.map(expense => ({
       ...expense,
-      category_name: expense.category?.name || null
+      category_name: expense.category?.name || null,
+      pending: false
     }));
 
-    expenseCache.set(cacheKey, formattedExpenses);
-    res.json(formattedExpenses);
+    const allExpenses = [...formattedExpenses, ...generatedFixedExpensesWithLink];
+    expenseCache.set(cacheKey, allExpenses);
+    res.json(allExpenses);
   } catch (err) {
     console.error('Erro ao buscar despesas:', err);
     res.status(500).json({ error: 'Erro ao buscar despesas.' });
@@ -257,70 +428,68 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
 
 // Criar renda
 router.post('/income', authMiddleware, async (req, res) => {
-  const { description, value, date, category_id } = req.body;
-  
+  let { description, value, date, category_id, isFixed, recurrenceType, startDate, endDate, fixed_income_id } = req.body;
+  const isFixedBool = isFixed === true || isFixed === 'true' || isFixed === 1 || isFixed === '1';
   try {
+    const parsedDate = parseDateString(date);
+    const parsedStartDate = parseDateString(startDate);
+    const parsedEndDate = parseDateString(endDate);
     const income = await prisma.income.create({
       data: {
         description,
         value: parseFloat(value),
-        date: new Date(date),
+        date: parsedDate ? makeLocalDate(parsedDate.year, parsedDate.month, parsedDate.day) : null,
         user_id: req.user.id,
-        category_id: category_id ? parseInt(category_id) : null
+        category_id: category_id ? parseInt(category_id) : null,
+        isFixed: isFixedBool,
+        recurrenceType: isFixedBool ? recurrenceType : null,
+        startDate: isFixedBool ? (parsedStartDate ? makeLocalDate(parsedStartDate.year, parsedStartDate.month, parsedStartDate.day) : null) : null,
+        endDate: isFixedBool ? (parsedEndDate ? makeLocalDate(parsedEndDate.year, parsedEndDate.month, parsedEndDate.day) : null) : null,
+        fixed_income_id: fixed_income_id || null
       },
       include: {
         category: {
-          select: {
-            name: true
-          }
+          select: { name: true }
         }
       }
     });
-
-    // Transformar dados para manter compatibilidade
-    const formattedIncome = {
-      ...income,
-      category_name: income.category?.name || null
-    };
-
-    res.status(201).json(formattedIncome);
+    incomeCache.clear();
+    res.status(201).json(income);
   } catch (err) {
-    console.error('Erro ao criar renda:', err);
-    res.status(500).json({ error: 'Erro ao criar renda.' });
+    res.status(500).json({ error: 'Erro ao criar receita.' });
   }
 });
 
 // Criar despesa
 router.post('/expense', authMiddleware, async (req, res) => {
-  const { description, value, date, category_id } = req.body;
-  
+  let { description, value, date, category_id, isFixed, recurrenceType, startDate, endDate, fixed_expense_id } = req.body;
+  const isFixedBool = isFixed === true || isFixed === 'true' || isFixed === 1 || isFixed === '1';
   try {
+    const parsedDate = parseDateString(date);
+    const parsedStartDate = parseDateString(startDate);
+    const parsedEndDate = parseDateString(endDate);
     const expense = await prisma.expense.create({
       data: {
         description,
         value: parseFloat(value),
-        date: new Date(date),
+        date: parsedDate ? makeLocalDate(parsedDate.year, parsedDate.month, parsedDate.day) : null,
         user_id: req.user.id,
-        category_id: category_id ? parseInt(category_id) : null
+        category_id: category_id ? parseInt(category_id) : null,
+        isFixed: isFixedBool,
+        recurrenceType: isFixedBool ? recurrenceType : null,
+        startDate: isFixedBool ? (parsedStartDate ? makeLocalDate(parsedStartDate.year, parsedStartDate.month, parsedStartDate.day) : null) : null,
+        endDate: isFixedBool ? (parsedEndDate ? makeLocalDate(parsedEndDate.year, parsedEndDate.month, parsedEndDate.day) : null) : null,
+        fixed_expense_id: fixed_expense_id || null
       },
       include: {
         category: {
-          select: {
-            name: true
-          }
+          select: { name: true }
         }
       }
     });
-
-    // Transformar dados para manter compatibilidade
-    const formattedExpense = {
-      ...expense,
-      category_name: expense.category?.name || null
-    };
-
-    res.status(201).json(formattedExpense);
+    expenseCache.clear();
+    res.status(201).json(expense);
   } catch (err) {
-    console.error('Erro ao criar despesa:', err);
     res.status(500).json({ error: 'Erro ao criar despesa.' });
   }
 });
@@ -357,6 +526,7 @@ router.put('/income/:id', authMiddleware, async (req, res) => {
       category_name: income.category?.name || null
     };
 
+    incomeCache.clear();
     res.json(formattedIncome);
   } catch (err) {
     if (err.code === 'P2025') {
@@ -399,6 +569,7 @@ router.put('/expense/:id', authMiddleware, async (req, res) => {
       category_name: expense.category?.name || null
     };
 
+    expenseCache.clear();
     res.json(formattedExpense);
   } catch (err) {
     if (err.code === 'P2025') {
@@ -421,6 +592,7 @@ router.delete('/income/:id', authMiddleware, async (req, res) => {
       }
     });
 
+    incomeCache.clear();
     res.json({ success: true });
   } catch (err) {
     if (err.code === 'P2025') {
@@ -443,6 +615,7 @@ router.delete('/expense/:id', authMiddleware, async (req, res) => {
       }
     });
 
+    expenseCache.clear();
     res.json({ success: true });
   } catch (err) {
     if (err.code === 'P2025') {
@@ -450,6 +623,51 @@ router.delete('/expense/:id', authMiddleware, async (req, res) => {
     }
     console.error('Erro ao excluir despesa:', err);
     res.status(500).json({ error: 'Erro ao excluir despesa.' });
+  }
+});
+
+// GET /income/:id/history
+router.get('/income/:id/history', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Buscar todos os lançamentos não fixos com mesma descrição, valor e categoria_id
+    const fixed = await prisma.income.findUnique({ where: { id: parseInt(id) } });
+    if (!fixed || !fixed.isFixed) return res.json([]);
+    const registros = await prisma.income.findMany({
+      where: {
+        user_id: req.user.id,
+        isFixed: false,
+        description: fixed.description,
+        category_id: fixed.category_id,
+        value: fixed.value
+      },
+      orderBy: { date: 'asc' }
+    });
+    res.json(registros.map(r => new Date(r.date).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })));
+  } catch {
+    res.json([]);
+  }
+});
+
+// GET /expense/:id/history
+router.get('/expense/:id/history', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const fixed = await prisma.expense.findUnique({ where: { id: parseInt(id) } });
+    if (!fixed || !fixed.isFixed) return res.json([]);
+    const registros = await prisma.expense.findMany({
+      where: {
+        user_id: req.user.id,
+        isFixed: false,
+        description: fixed.description,
+        category_id: fixed.category_id,
+        value: fixed.value
+      },
+      orderBy: { date: 'asc' }
+    });
+    res.json(registros.map(r => new Date(r.date).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })));
+  } catch {
+    res.json([]);
   }
 });
 

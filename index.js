@@ -29,7 +29,7 @@ app.use('/api/auth', authRoutes);
 const protectedRoutes = require('./routes/protected');
 app.use('/api/protected', protectedRoutes);
 
-const financeRoutes = require('./routes/finance');
+const financeRoutes = require('./routes/finance-prisma');
 app.use('/api/finance', financeRoutes);
 
 const categoryRoutes = require('./routes/category');
