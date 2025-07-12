@@ -9,8 +9,6 @@ const incomeCache = new LRUCache({ max: 100, ttl: 1000 * 60 * 5 });
 const expenseCache = new LRUCache({ max: 100, ttl: 1000 * 60 * 5 });
 const dashboardCache = new LRUCache({ max: 100, ttl: 1000 * 60 * 5 });
 
-console.log('Arquivo de rotas carregado!');
-
 // Função auxiliar para montar data no formato YYYY-MM-DDT00:00:00
 function makeLocalDate(year, month, day) {
   // month: 1-based (1=Jan)
@@ -18,11 +16,58 @@ function makeLocalDate(year, month, day) {
   const dd = String(day).padStart(2, '0');
   return new Date(`${year}-${mm}-${dd}T00:00:00`);
 }
-// Função auxiliar para parsear string 'YYYY-MM-DD'
+
+// Função auxiliar para parsear string de data (YYYY-MM-DD)
 function parseDateString(dateStr) {
   if (!dateStr) return null;
-  const [year, month, day] = dateStr.split('-').map(Number);
-  return { year, month, day };
+  
+
+  
+  // Se já é um objeto Date, extrair componentes
+  if (dateStr instanceof Date) {
+    return {
+      year: dateStr.getFullYear(),
+      month: dateStr.getMonth() + 1, // getMonth() retorna 0-11
+      day: dateStr.getDate()
+    };
+  }
+  
+  // Se é string, tentar parsear
+  if (typeof dateStr === 'string') {
+    // Remover espaços em branco
+    const cleanDateStr = dateStr.trim();
+    
+    // Verificar se é formato YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cleanDateStr)) {
+      const [year, month, day] = cleanDateStr.split('-').map(Number);
+      
+          // Validar se os valores são números válidos
+    if (isNaN(year) || isNaN(month) || isNaN(day)) {
+      return null;
+    }
+    
+    // Validar se os valores estão em ranges válidos
+    if (year < 1900 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) {
+      return null;
+    }
+      
+      return { year, month, day };
+    }
+    
+    // Tentar parsear como Date se não for formato YYYY-MM-DD
+    const dateObj = new Date(cleanDateStr);
+    if (!isNaN(dateObj.getTime())) {
+      return {
+        year: dateObj.getFullYear(),
+        month: dateObj.getMonth() + 1,
+        day: dateObj.getDate()
+      };
+    }
+    
+    return null;
+  }
+  
+  return null;
 }
 
 // Listar rendas
@@ -430,22 +475,55 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
 router.post('/income', authMiddleware, async (req, res) => {
   let { description, value, date, category_id, isFixed, recurrenceType, startDate, endDate, fixed_income_id } = req.body;
   const isFixedBool = isFixed === true || isFixed === 'true' || isFixed === 1 || isFixed === '1';
+
+
+
+  // Validação básica
+  if (!value || !date) {
+    return res.status(400).json({ error: 'Valor e data são obrigatórios.' });
+  }
+
   try {
+
+
     const parsedDate = parseDateString(date);
     const parsedStartDate = parseDateString(startDate);
     const parsedEndDate = parseDateString(endDate);
+
+    // Validar se a data principal foi parseada corretamente
+    if (!parsedDate) {
+      return res.status(400).json({ 
+        error: 'Data inválida. Formato esperado: YYYY-MM-DD',
+        receivedDate: date,
+        dateType: typeof date
+      });
+    }
+
+    // Validar se a categoria existe (se fornecida)
+    if (category_id) {
+      const categoryExists = await prisma.category.findFirst({
+        where: {
+          id: parseInt(category_id),
+          user_id: req.user.id
+        }
+      });
+      if (!categoryExists) {
+        return res.status(400).json({ error: 'Categoria não encontrada.' });
+      }
+    }
+
     const income = await prisma.income.create({
       data: {
         description,
         value: parseFloat(value),
-        date: parsedDate ? makeLocalDate(parsedDate.year, parsedDate.month, parsedDate.day) : null,
+        date: makeLocalDate(parsedDate.year, parsedDate.month, parsedDate.day),
         user_id: req.user.id,
         category_id: category_id ? parseInt(category_id) : null,
         isFixed: isFixedBool,
         recurrenceType: isFixedBool ? recurrenceType : null,
         startDate: isFixedBool ? (parsedStartDate ? makeLocalDate(parsedStartDate.year, parsedStartDate.month, parsedStartDate.day) : null) : null,
         endDate: isFixedBool ? (parsedEndDate ? makeLocalDate(parsedEndDate.year, parsedEndDate.month, parsedEndDate.day) : null) : null,
-        fixed_income_id: fixed_income_id || null
+        fixed_income_id: fixed_income_id ? parseInt(fixed_income_id) : null
       },
       include: {
         category: {
@@ -453,9 +531,25 @@ router.post('/income', authMiddleware, async (req, res) => {
         }
       }
     });
+
+    // Não criar mais lançamento inicial automaticamente
+    // O histórico agora sempre inclui o lançamento inicial baseado no startDate
+
     incomeCache.clear();
     res.status(201).json(income);
   } catch (err) {
+    console.error('Erro ao criar receita:', err);
+    console.error('Dados que causaram erro:', {
+      description,
+      value,
+      date,
+      category_id,
+      isFixed: isFixedBool,
+      recurrenceType,
+      startDate,
+      endDate,
+      fixed_income_id
+    });
     res.status(500).json({ error: 'Erro ao criar receita.' });
   }
 });
@@ -464,22 +558,55 @@ router.post('/income', authMiddleware, async (req, res) => {
 router.post('/expense', authMiddleware, async (req, res) => {
   let { description, value, date, category_id, isFixed, recurrenceType, startDate, endDate, fixed_expense_id } = req.body;
   const isFixedBool = isFixed === true || isFixed === 'true' || isFixed === 1 || isFixed === '1';
+
+
+
+  // Validação básica
+  if (!value || !date) {
+    return res.status(400).json({ error: 'Valor e data são obrigatórios.' });
+  }
+
   try {
+
+
     const parsedDate = parseDateString(date);
     const parsedStartDate = parseDateString(startDate);
     const parsedEndDate = parseDateString(endDate);
+
+    // Validar se a data principal foi parseada corretamente
+    if (!parsedDate) {
+      return res.status(400).json({ 
+        error: 'Data inválida. Formato esperado: YYYY-MM-DD',
+        receivedDate: date,
+        dateType: typeof date
+      });
+    }
+
+    // Validar se a categoria existe (se fornecida)
+    if (category_id) {
+      const categoryExists = await prisma.category.findFirst({
+        where: {
+          id: parseInt(category_id),
+          user_id: req.user.id
+        }
+      });
+      if (!categoryExists) {
+        return res.status(400).json({ error: 'Categoria não encontrada.' });
+      }
+    }
+
     const expense = await prisma.expense.create({
       data: {
         description,
         value: parseFloat(value),
-        date: parsedDate ? makeLocalDate(parsedDate.year, parsedDate.month, parsedDate.day) : null,
+        date: makeLocalDate(parsedDate.year, parsedDate.month, parsedDate.day),
         user_id: req.user.id,
         category_id: category_id ? parseInt(category_id) : null,
         isFixed: isFixedBool,
         recurrenceType: isFixedBool ? recurrenceType : null,
         startDate: isFixedBool ? (parsedStartDate ? makeLocalDate(parsedStartDate.year, parsedStartDate.month, parsedStartDate.day) : null) : null,
         endDate: isFixedBool ? (parsedEndDate ? makeLocalDate(parsedEndDate.year, parsedEndDate.month, parsedEndDate.day) : null) : null,
-        fixed_expense_id: fixed_expense_id || null
+        fixed_expense_id: fixed_expense_id ? parseInt(fixed_expense_id) : null
       },
       include: {
         category: {
@@ -487,9 +614,25 @@ router.post('/expense', authMiddleware, async (req, res) => {
         }
       }
     });
+
+    // Não criar mais lançamento inicial automaticamente
+    // O histórico agora sempre inclui o lançamento inicial baseado no startDate
+
     expenseCache.clear();
     res.status(201).json(expense);
   } catch (err) {
+    console.error('Erro ao criar despesa:', err);
+    console.error('Dados que causaram erro:', {
+      description,
+      value,
+      date,
+      category_id,
+      isFixed: isFixedBool,
+      recurrenceType,
+      startDate,
+      endDate,
+      fixed_expense_id
+    });
     res.status(500).json({ error: 'Erro ao criar despesa.' });
   }
 });
@@ -630,21 +773,106 @@ router.delete('/expense/:id', authMiddleware, async (req, res) => {
 router.get('/income/:id/history', authMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
-    // Buscar todos os lançamentos não fixos com mesma descrição, valor e categoria_id
     const fixed = await prisma.income.findUnique({ where: { id: parseInt(id) } });
-    if (!fixed || !fixed.isFixed) return res.json([]);
-    const registros = await prisma.income.findMany({
+    if (!fixed || !fixed.isFixed) {
+      return res.json([]);
+    }
+
+    // Data de início da recorrência
+    const startDate = fixed.startDate ? new Date(fixed.startDate) : null;
+    const startYear = startDate ? startDate.getFullYear() : null;
+    const startMonth = startDate ? startDate.getMonth() + 1 : null;
+
+    // Buscar o lançamento inicial (se existir)
+    let initialEntry = null;
+    if (startDate) {
+      initialEntry = await prisma.income.findFirst({
+        where: {
+          user_id: req.user.id,
+          isFixed: false,
+          fixed_income_id: fixed.id,
+          date: {
+            gte: new Date(startDate.getFullYear(), startDate.getMonth(), 1),
+            lt: new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1)
+          }
+        }
+      });
+    }
+
+    // Buscar outros lançamentos vinculados, exceto o mês do início
+    const linkedRegistros = await prisma.income.findMany({
+      where: {
+        user_id: req.user.id,
+        isFixed: false,
+        fixed_income_id: fixed.id,
+        ...(startDate && {
+          OR: [
+            { date: { lt: new Date(startDate.getFullYear(), startDate.getMonth(), 1) } },
+            { date: { gte: new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1) } }
+          ]
+        })
+      },
+      orderBy: { date: 'asc' }
+    });
+
+    // Buscar similares (mesma descrição, valor e categoria, não vinculados), exceto o mês do início
+    const similarRegistros = await prisma.income.findMany({
       where: {
         user_id: req.user.id,
         isFixed: false,
         description: fixed.description,
         category_id: fixed.category_id,
-        value: fixed.value
+        value: fixed.value,
+        fixed_income_id: null,
+        ...(startDate && {
+          OR: [
+            { date: { lt: new Date(startDate.getFullYear(), startDate.getMonth(), 1) } },
+            { date: { gte: new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1) } }
+          ]
+        })
       },
       orderBy: { date: 'asc' }
     });
-    res.json(registros.map(r => new Date(r.date).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })));
-  } catch {
+
+    // Montar lista final
+    let allRegistros = [];
+    
+    // Sempre incluir o mês inicial (se existir startDate)
+    if (startDate) {
+      allRegistros.push({
+        id: 'initial',
+        description: fixed.description,
+        value: fixed.value,
+        date: startDate,
+        category: fixed.category_id ? await prisma.category.findUnique({ where: { id: fixed.category_id } }) : null,
+        isInitial: true
+      });
+    }
+    
+    // Adicionar lançamentos reais
+    if (initialEntry) allRegistros.push(initialEntry);
+    allRegistros = [...allRegistros, ...linkedRegistros, ...similarRegistros];
+    
+    // Remover duplicatas baseado na data formatada
+    const uniqueRegistros = allRegistros.filter((item, index, self) => {
+      const itemDate = new Date(item.date).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      return index === self.findIndex(t => {
+        const tDate = new Date(t.date).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+        return tDate === itemDate;
+      });
+    });
+    
+    // Ordenar por data
+    uniqueRegistros.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Remover campo isInitial do objeto final
+    const result = uniqueRegistros.map(r => {
+      const { isInitial, ...rest } = r;
+      return rest;
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('Erro no histórico de receitas:', error);
     res.json([]);
   }
 });
@@ -654,19 +882,105 @@ router.get('/expense/:id/history', authMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
     const fixed = await prisma.expense.findUnique({ where: { id: parseInt(id) } });
-    if (!fixed || !fixed.isFixed) return res.json([]);
-    const registros = await prisma.expense.findMany({
+    if (!fixed || !fixed.isFixed) {
+      return res.json([]);
+    }
+
+    // Data de início da recorrência
+    const startDate = fixed.startDate ? new Date(fixed.startDate) : null;
+    const startYear = startDate ? startDate.getFullYear() : null;
+    const startMonth = startDate ? startDate.getMonth() + 1 : null;
+
+    // Buscar o lançamento inicial (se existir)
+    let initialEntry = null;
+    if (startDate) {
+      initialEntry = await prisma.expense.findFirst({
+        where: {
+          user_id: req.user.id,
+          isFixed: false,
+          fixed_expense_id: fixed.id,
+          date: {
+            gte: new Date(startDate.getFullYear(), startDate.getMonth(), 1),
+            lt: new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1)
+          }
+        }
+      });
+    }
+
+    // Buscar outros lançamentos vinculados, exceto o mês do início
+    const linkedRegistros = await prisma.expense.findMany({
+      where: {
+        user_id: req.user.id,
+        isFixed: false,
+        fixed_expense_id: fixed.id,
+        ...(startDate && {
+          OR: [
+            { date: { lt: new Date(startDate.getFullYear(), startDate.getMonth(), 1) } },
+            { date: { gte: new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1) } }
+          ]
+        })
+      },
+      orderBy: { date: 'asc' }
+    });
+
+    // Buscar similares (mesma descrição, valor e categoria, não vinculados), exceto o mês do início
+    const similarRegistros = await prisma.expense.findMany({
       where: {
         user_id: req.user.id,
         isFixed: false,
         description: fixed.description,
         category_id: fixed.category_id,
-        value: fixed.value
+        value: fixed.value,
+        fixed_expense_id: null,
+        ...(startDate && {
+          OR: [
+            { date: { lt: new Date(startDate.getFullYear(), startDate.getMonth(), 1) } },
+            { date: { gte: new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1) } }
+          ]
+        })
       },
       orderBy: { date: 'asc' }
     });
-    res.json(registros.map(r => new Date(r.date).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })));
-  } catch {
+
+    // Montar lista final
+    let allRegistros = [];
+    
+    // Sempre incluir o mês inicial (se existir startDate)
+    if (startDate) {
+      allRegistros.push({
+        id: 'initial',
+        description: fixed.description,
+        value: fixed.value,
+        date: startDate,
+        category: fixed.category_id ? await prisma.category.findUnique({ where: { id: fixed.category_id } }) : null,
+        isInitial: true
+      });
+    }
+    
+    // Adicionar lançamentos reais
+    if (initialEntry) allRegistros.push(initialEntry);
+    allRegistros = [...allRegistros, ...linkedRegistros, ...similarRegistros];
+    
+    // Remover duplicatas baseado na data formatada
+    const uniqueRegistros = allRegistros.filter((item, index, self) => {
+      const itemDate = new Date(item.date).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      return index === self.findIndex(t => {
+        const tDate = new Date(t.date).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+        return tDate === itemDate;
+      });
+    });
+    
+    // Ordenar por data
+    uniqueRegistros.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Remover campo isInitial do objeto final
+    const result = uniqueRegistros.map(r => {
+      const { isInitial, ...rest } = r;
+      return rest;
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('Erro no histórico de despesas:', error);
     res.json([]);
   }
 });

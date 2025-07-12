@@ -166,20 +166,10 @@ router.post('/login', async (req, res) => {
 });
 
 // Novo endpoint: retorna dados do usuário autenticado, sem checar status de assinatura
-router.get('/me', async (req, res) => {
+router.get('/me', authMiddleware.requireAuth, async (req, res) => {
   try {
-    // Extrai token do header
-    let token;
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.split(' ')[1];
-    }
-    if (!token) {
-      return res.status(401).json({ error: 'Token não fornecido.' });
-    }
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
+      where: { id: req.user.id },
       select: {
         id: true,
         name: true,
@@ -187,7 +177,8 @@ router.get('/me', async (req, res) => {
         subscription_status: true,
         trial_end: true,
         created_at: true,
-        plan: true
+        plan: true,
+        premium_until: true
       }
     });
     if (!user) {
@@ -196,7 +187,7 @@ router.get('/me', async (req, res) => {
     res.json({ user });
   } catch (err) {
     console.error('Erro ao buscar dados do usuário:', err);
-    res.status(401).json({ error: 'Token inválido.' });
+    res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 });
 

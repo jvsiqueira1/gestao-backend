@@ -42,6 +42,38 @@ async function sendTrialExpiringEmail(to, nome, trialEndDate) {
   });
 }
 
+router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], endpointSecret);
+  } catch (err) {
+    console.error('Webhook signature verification failed.', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    if (session.amount_total === 15000 && session.customer_email) {
+      // Liberar premium anual para o usuário com esse email
+      const user = await prisma.user.findUnique({ where: { email: session.customer_email } });
+      if (user) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            subscription_status: 'active',
+            plan: 'anual'
+          }
+        });
+      }
+    }
+  }
+
+  res.json({ received: true });
+});
+
 router.post('/', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
@@ -57,37 +89,93 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object;
+        
         if (session.mode === 'subscription') {
           if (!session.metadata || !session.metadata.user_id) {
             console.error('user_id ausente em session.metadata');
             return res.status(400).json({ error: 'user_id ausente em session.metadata' });
           }
+          
+          // Calcular premium_until baseado no tipo de plano
+          const premiumUntil = new Date();
+          if (session.amount_total === 15000) {
+            // Plano anual
+            premiumUntil.setFullYear(premiumUntil.getFullYear() + 1);
+          } else {
+            // Plano mensal
+            premiumUntil.setMonth(premiumUntil.getMonth() + 1);
+          }
+          
           const result = await prisma.user.update({
             where: { id: Number(session.metadata.user_id) },
             data: {
               subscription_status: 'active',
               stripe_customer_id: session.customer,
-              plan: 'PREMIUM'
+              plan: session.amount_total === 15000 ? 'anual' : 'mensal',
+              premium_until: premiumUntil,
+              trial_end: null // Zerar o trial quando assina plano pago
             }
           });
           const token = jwt.sign({ userId: Number(session.metadata.user_id) }, process.env.JWT_SECRET, { expiresIn: '1d' });
           return res.json({ received: true, token });
+        } else if (session.mode === 'payment' && session.amount_total === 15000 && session.customer_email) {
+          // Liberar premium anual para o usuário com esse email
+          const user = await prisma.user.findUnique({ where: { email: session.customer_email } });
+          if (user) {
+            const premiumUntil = new Date();
+            premiumUntil.setFullYear(premiumUntil.getFullYear() + 1); // 12 meses a partir de agora
+            
+            await prisma.user.update({
+              where: { id: user.id },
+              data: {
+                subscription_status: 'active',
+                premium_until: premiumUntil,
+                plan: 'anual',
+                trial_end: null // Zerar o trial quando assina plano pago
+              }
+            });
+          }
         }
         break;
       }
       case 'customer.subscription.updated': {
         const subscription = event.data.object;
-        const updateResult = await prisma.user.updateMany({
-          where: { stripe_customer_id: subscription.customer },
-          data: {
-            subscription_status: subscription.status,
-            plan: subscription.status === 'active' ? 'PREMIUM' : 'TRIAL'
-          }
+        
+        // Buscar o usuário para obter informações atuais
+        const user = await prisma.user.findFirst({ 
+          where: { stripe_customer_id: subscription.customer } 
         });
-        // Se ficou active, gere novo JWT para o primeiro usuário encontrado
-        if (subscription.status === 'active') {
-          const user = await prisma.user.findFirst({ where: { stripe_customer_id: subscription.customer } });
-          if (user) {
+        
+        if (user) {
+          let updateData = {
+            subscription_status: subscription.status
+          };
+          
+          // Se a subscription ficou ativa, zerar o trial e definir premium_until
+          if (subscription.status === 'active') {
+            updateData.trial_end = null; // Zerar o trial
+            
+            // Calcular premium_until baseado no current_period_end
+            if (subscription.current_period_end) {
+              updateData.premium_until = new Date(subscription.current_period_end * 1000);
+            }
+            
+            // Definir o plano baseado no valor (se disponível)
+            if (subscription.items && subscription.items.data.length > 0) {
+              const item = subscription.items.data[0];
+              if (item.price && item.price.unit_amount) {
+                updateData.plan = item.price.unit_amount === 15000 ? 'anual' : 'mensal';
+              }
+            }
+          }
+          
+          await prisma.user.update({
+            where: { id: user.id },
+            data: updateData
+          });
+          
+          // Se ficou active, gere novo JWT
+          if (subscription.status === 'active') {
             const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '1d' });
             return res.json({ received: true, token });
           }
@@ -96,13 +184,22 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
       }
       case 'customer.subscription.deleted': {
         const deletedSubscription = event.data.object;
-        const delResult = await prisma.user.updateMany({
+        // Buscar o usuário para saber o plano atual
+        const user = await prisma.user.findFirst({
           where: { stripe_customer_id: deletedSubscription.customer },
-          data: {
-            subscription_status: 'canceled',
-            plan: 'TRIAL'
-          }
         });
+
+        if (user) {
+          // Manter o plano atual e premium_until, apenas marcar como cancelado
+          // O usuário terá acesso até premium_until
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              subscription_status: 'canceled'
+              // Não altera plan nem premium_until - mantém acesso até a data de expiração
+            }
+          });
+        }
         break;
       }
       case 'invoice.payment_failed': {
@@ -110,15 +207,14 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
         const failResult = await prisma.user.updateMany({
           where: { stripe_customer_id: invoice.customer },
           data: {
-            subscription_status: 'past_due',
-            plan: 'TRIAL'
+            subscription_status: 'past_due'
+            // Não altera plan nem premium_until - mantém acesso até resolver o pagamento
           }
         });
         break;
       }
       case 'customer.subscription.trial_will_end': {
         const subscription = event.data.object;
-        console.log('customer.subscription.trial_will_end - subscription:', subscription);
         // Buscar usuário pelo stripe_customer_id
         const user = await prisma.user.findFirst({
           where: { stripe_customer_id: subscription.customer },
@@ -127,7 +223,6 @@ router.post('/', express.raw({ type: 'application/json' }), async (req, res) => 
           const trialEnd = new Date(subscription.trial_end * 1000).toLocaleDateString('pt-BR');
           try {
             await sendTrialExpiringEmail(user.email, user.name, trialEnd);
-            console.log('E-mail de trial expirando enviado para', user.email);
           } catch (err) {
             console.error('Erro ao enviar e-mail de trial expirando:', err);
           }

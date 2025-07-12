@@ -37,7 +37,8 @@ module.exports = async function (req, res, next) {
         subscription_status: true,
         trial_end: true,
         created_at: true,
-        plan: true
+        plan: true,
+        premium_until: true
       }
     });
     
@@ -46,17 +47,26 @@ module.exports = async function (req, res, next) {
     }
     
     const now = new Date();
-    if (
-      user.subscription_status === 'active' ||
-      (user.subscription_status === 'trialing' && user.trial_end && new Date(user.trial_end) > now)
-    ) {
+    
+    // Lógica simplificada de verificação de acesso:
+    // 1. Assinatura ativa = acesso garantido
+    // 2. Trial válido = acesso garantido
+    // 3. Premium_until válido = acesso garantido (para planos cancelados)
+    // 4. Plano TRIAL = acesso garantido
+    
+    const hasActiveSubscription = user.subscription_status === 'active';
+    const hasValidTrial = user.trial_end && new Date(user.trial_end) > now;
+    const hasValidPremiumUntil = user.premium_until && new Date(user.premium_until) > now;
+    const hasTrialPlan = user.plan === 'TRIAL';
+    
+    // Verificar se tem acesso
+    if (hasActiveSubscription || hasValidTrial || hasValidPremiumUntil || hasTrialPlan) {
       req.user = user;
       next();
     } else {
       return res.status(402).json({ error: 'Assinatura expirada ou trial encerrado.' });
     }
   } catch (err) {
-    console.error('Erro no middleware de autenticação:', err);
     return res.status(401).json({ error: 'Token inválido.' });
   }
 };
@@ -89,7 +99,8 @@ module.exports.requireAuth = async function (req, res, next) {
         subscription_status: true,
         trial_end: true,
         created_at: true,
-        plan: true
+        plan: true,
+        premium_until: true
       }
     });
     if (!user) {
@@ -98,7 +109,6 @@ module.exports.requireAuth = async function (req, res, next) {
     req.user = user;
     next();
   } catch (err) {
-    console.error('Erro no requireAuth:', err);
     return res.status(401).json({ error: 'Token inválido.' });
   }
 }; 
