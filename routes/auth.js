@@ -29,7 +29,7 @@ async function sendWelcomeEmail(to, nome) {
           <h2 style="color: #0e7490; margin-bottom: 16px;">Olá, ${nome}!</h2>
           <p style="font-size: 1.1em; margin-bottom: 16px;">Sua conta foi criada com sucesso no <b>Gestão de Gastos</b>!</p>
           <p style="margin-bottom: 24px;">Aproveite o período de teste gratuito para conhecer todos os recursos premium: dashboard, relatórios, exportação de dados e muito mais.</p>
-          <a href="https://gestao.jvsdev.com.br/profile" style="display: inline-block; background: #0e7490; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; font-size: 1.1em; margin-bottom: 16px;">Acessar Perfil</a>
+          <a href="https://gestao.jvsdev.com.br/perfil" style="display: inline-block; background: #0e7490; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; font-size: 1.1em; margin-bottom: 16px;">Acessar Perfil</a>
           <ul style="margin: 32px 0 16px 0; padding: 0; list-style: none;">
             <li style="margin-bottom: 8px;"><span style="color: #22c55e; font-weight: bold;">✓</span> Dashboard completo</li>
             <li style="margin-bottom: 8px;"><span style="color: #22c55e; font-weight: bold;">✓</span> Categorização de despesas</li>
