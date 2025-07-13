@@ -186,8 +186,7 @@ router.get('/me', authMiddleware.requireAuth, async (req, res) => {
         subscription_status: true,
         trial_end: true,
         created_at: true,
-        plan: true,
-        premium_until: true
+        plan: true
       }
     });
     if (!user) {
@@ -198,20 +197,6 @@ router.get('/me', authMiddleware.requireAuth, async (req, res) => {
     console.error('Erro ao buscar dados do usuário:', err);
     res.status(500).json({ error: 'Erro interno do servidor.' });
   }
-});
-
-// Endpoint de teste para verificar se o backend está funcionando
-router.get('/test', (req, res) => {
-  res.json({ 
-    message: 'Backend funcionando!',
-    timestamp: new Date().toISOString(),
-    env: {
-      hasJwtSecret: !!process.env.JWT_SECRET,
-      hasDatabaseUrl: !!process.env.DATABASE_URL,
-      hasFrontendUrl: !!process.env.FRONTEND_URL,
-      nodeEnv: process.env.NODE_ENV
-    }
-  });
 });
 
 module.exports = router; 
