@@ -140,6 +140,8 @@ router.post('/register', async (req, res) => {
 // Login de usuário
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
+  console.log('🔐 Login attempt for:', email);
+  
   if (!email || !password) {
     return res.status(400).json({ error: 'Email e senha são obrigatórios.' });
   }
@@ -149,18 +151,25 @@ router.post('/login', async (req, res) => {
     });
     
     if (!user) {
+      console.log('❌ User not found for email:', email);
       return res.status(401).json({ error: 'Credenciais inválidas.' });
     }
     
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) {
+      console.log('❌ Invalid password for email:', email);
       return res.status(401).json({ error: 'Credenciais inválidas.' });
     }
     
+    console.log('✅ Login successful for user:', user.email, 'ID:', user.id);
+    console.log('🔑 JWT_SECRET present:', !!process.env.JWT_SECRET);
+    
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '1d' });
+    console.log('🎫 Token generated:', token ? `${token.substring(0, 20)}...` : 'null');
+    
     res.json({ token });
   } catch (err) {
-    console.error('Erro detalhado ao fazer login: ', err);
+    console.error('❌ Erro detalhado ao fazer login: ', err);
     res.status(500).json({ error: 'Erro ao fazer login.' });
   }
 });
@@ -189,6 +198,20 @@ router.get('/me', authMiddleware.requireAuth, async (req, res) => {
     console.error('Erro ao buscar dados do usuário:', err);
     res.status(500).json({ error: 'Erro interno do servidor.' });
   }
+});
+
+// Endpoint de teste para verificar se o backend está funcionando
+router.get('/test', (req, res) => {
+  res.json({ 
+    message: 'Backend funcionando!',
+    timestamp: new Date().toISOString(),
+    env: {
+      hasJwtSecret: !!process.env.JWT_SECRET,
+      hasDatabaseUrl: !!process.env.DATABASE_URL,
+      hasFrontendUrl: !!process.env.FRONTEND_URL,
+      nodeEnv: process.env.NODE_ENV
+    }
+  });
 });
 
 module.exports = router; 

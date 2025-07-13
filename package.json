@@ -10,7 +10,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:seed": "node prisma/seed.js",
-    "start": "node index.js"
+    "start": "node index.js",
+    "test:db": "node scripts/testDatabase.js"
   },
   "keywords": [],
   "author": "",
