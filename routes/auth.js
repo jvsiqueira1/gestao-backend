@@ -8,17 +8,17 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const router = express.Router();
 
-const transporter = nodemailer.createTransport({
-  host: 'smtp.zoho.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.ZOHO_USER,
-    pass: process.env.ZOHO_PASS,
-  },
-});
-
 async function sendWelcomeEmail(to, nome) {
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.zoho.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.ZOHO_USER,
+      pass: process.env.ZOHO_PASS,
+    },
+  });
+  
   await transporter.sendMail({
     from: `"Gestão de Gastos" <${process.env.ZOHO_USER}>`,
     to,
@@ -47,6 +47,16 @@ async function sendWelcomeEmail(to, nome) {
 
 // Função para enviar e-mail de recuperação de senha
 async function sendPasswordResetEmail(to, nome, token) {
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.zoho.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.ZOHO_USER,
+      pass: process.env.ZOHO_PASS,
+    },
+  });
+  
   const isDev = process.env.NODE_ENV !== 'production';
   const resetUrl = isDev
     ? `http://localhost:3000/trocar-senha?token=${token}`
