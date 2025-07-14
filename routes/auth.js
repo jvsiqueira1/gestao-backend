@@ -6,6 +6,13 @@ const authMiddleware = require('../middleware/authMiddleware');
 const nodemailer = require('nodemailer');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
+// Debug das importações
+console.log('=== DEBUG IMPORTAÇÕES ===');
+console.log('Express carregado:', !!express);
+console.log('Prisma carregado:', !!prisma);
+console.log('Prisma client disponível:', !!(prisma && prisma.user));
+console.log('PasswordResetToken disponível:', !!(prisma && prisma.passwordResetToken));
+
 const router = express.Router();
 
 async function sendWelcomeEmail(to, nome) {
@@ -86,29 +93,52 @@ router.post('/esqueci-senha', async (req, res) => {
   if (!email) {
     return res.status(400).json({ error: 'E-mail é obrigatório.' });
   }
+  
+  console.log('=== DEBUG ESQUECI-SENHA ===');
+  console.log('Email recebido:', email);
+  console.log('Prisma disponível:', !!prisma);
+  console.log('Prisma.passwordResetToken disponível:', !!(prisma && prisma.passwordResetToken));
+  
   try {
+    console.log('1. Buscando usuário...');
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
+      console.log('Usuário não encontrado');
       // Por segurança, não revelar se o e-mail existe ou não
       return res.status(200).json({ message: 'Se o e-mail existir, enviaremos instruções para redefinir a senha.' });
     }
+    console.log('Usuário encontrado:', user.name);
+    
     // Gerar token seguro
+    console.log('2. Gerando token...');
     const crypto = require('crypto');
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+    console.log('Token gerado:', token);
+    
     // Salvar token no banco
-    await prisma.passwordResetToken.create({
+    console.log('3. Salvando token no banco...');
+    console.log('Dados para salvar:', { token, userId: user.id, expiresAt });
+    
+    const savedToken = await prisma.passwordResetToken.create({
       data: {
         token,
         userId: user.id,
         expiresAt,
       }
     });
+    console.log('Token salvo:', savedToken);
+    
     // Enviar e-mail
+    console.log('4. Enviando email...');
     await sendPasswordResetEmail(user.email, user.name, token);
+    console.log('Email enviado com sucesso');
+    
     return res.status(200).json({ message: 'Se o e-mail existir, enviaremos instruções para redefinir a senha.' });
   } catch (err) {
     console.error('Erro ao solicitar recuperação de senha:', err);
+    console.error('Stack trace:', err.stack);
+    console.error('Prisma error details:', err.message);
     res.status(500).json({ error: 'Erro ao solicitar recuperação de senha.' });
   }
 });
