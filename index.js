@@ -8,14 +8,15 @@ require('./cron/laminaCron');
 const app = express();
 const allowedOrigins = [
   'http://localhost:3000',
-  process.env.FRONTEND_URL, 
+  process.env.FRONTEND_URL,
+  '*', // Permite qualquer origem para desenvolvimento
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
     // Permite requests sem origin (ex: mobile, curl)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) return callback(null, true);
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
@@ -69,5 +70,5 @@ app.get('/', (req, res) => {
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-  // Servidor iniciado com sucesso
+  console.log(`Server running on port ${PORT}`)
 });

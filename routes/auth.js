@@ -45,6 +45,91 @@ async function sendWelcomeEmail(to, nome) {
   });
 }
 
+// Função para enviar e-mail de recuperação de senha
+async function sendPasswordResetEmail(to, nome, token) {
+  const isDev = process.env.NODE_ENV !== 'production';
+  const resetUrl = isDev
+    ? `http://localhost:3000/trocar-senha?token=${token}`
+    : `https://gestao.jvsdev.com.br/trocar-senha?token=${token}`;
+  await transporter.sendMail({
+    from: `"Gestão de Gastos" <${process.env.ZOHO_USER}>`,
+    to,
+    subject: 'Recuperação de senha - Gestão de Gastos',
+    html: `
+      <div style="font-family: 'Segoe UI', Arial, sans-serif; background: #f8fafc; padding: 32px; color: #222;">
+        <div style="max-width: 480px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 2px 8px #0001; padding: 32px;">
+          <h2 style="color: #0e7490; margin-bottom: 16px;">Olá, ${nome}!</h2>
+          <p style="font-size: 1.1em; margin-bottom: 16px;">Recebemos uma solicitação para redefinir sua senha no <b>Gestão de Gastos</b>.</p>
+          <p style="margin-bottom: 24px;">Clique no botão abaixo para criar uma nova senha. O link é válido por 1 hora.</p>
+          <a href="${resetUrl}" style="display: inline-block; background: #0e7490; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; font-size: 1.1em; margin-bottom: 16px;">Trocar senha</a>
+          <p style="font-size: 0.95em; color: #666; margin-top: 24px;">Se você não solicitou, ignore este e-mail.</p>
+          <div style="margin-top: 32px; text-align: center; color: #aaa; font-size: 0.9em;">Equipe Gestão de Gastos</div>
+        </div>
+      </div>
+    `,
+  });
+}
+
+// Endpoint para solicitar recuperação de senha
+router.post('/esqueci-senha', async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: 'E-mail é obrigatório.' });
+  }
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      // Por segurança, não revelar se o e-mail existe ou não
+      return res.status(200).json({ message: 'Se o e-mail existir, enviaremos instruções para redefinir a senha.' });
+    }
+    // Gerar token seguro
+    const crypto = require('crypto');
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+    // Salvar token no banco
+    await prisma.passwordResetToken.create({
+      data: {
+        token,
+        userId: user.id,
+        expiresAt,
+      }
+    });
+    // Enviar e-mail
+    await sendPasswordResetEmail(user.email, user.name, token);
+    return res.status(200).json({ message: 'Se o e-mail existir, enviaremos instruções para redefinir a senha.' });
+  } catch (err) {
+    console.error('Erro ao solicitar recuperação de senha:', err);
+    res.status(500).json({ error: 'Erro ao solicitar recuperação de senha.' });
+  }
+});
+
+// Endpoint para trocar a senha usando o token
+router.post('/trocar-senha', async (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password) {
+    return res.status(400).json({ error: 'Token e nova senha são obrigatórios.' });
+  }
+  try {
+    // Buscar token no banco
+    const resetToken = await prisma.passwordResetToken.findUnique({ where: { token } });
+    if (!resetToken || resetToken.expiresAt < new Date()) {
+      return res.status(400).json({ error: 'Token inválido ou expirado.' });
+    }
+    // Atualizar senha do usuário
+    const password_hash = await bcrypt.hash(password, 10);
+    await prisma.user.update({
+      where: { id: resetToken.userId },
+      data: { password: password_hash }
+    });
+    // Deletar todos os tokens desse usuário (opcional: só o usado)
+    await prisma.passwordResetToken.deleteMany({ where: { userId: resetToken.userId } });
+    return res.status(200).json({ message: 'Senha alterada com sucesso.' });
+  } catch (err) {
+    console.error('Erro ao trocar senha:', err);
+    res.status(500).json({ error: 'Erro ao trocar senha.' });
+  }
+});
+
 router.post('/register', async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
@@ -108,25 +193,15 @@ router.post('/register', async (req, res) => {
       { name: 'Educação', type: 'expense' },
       { name: 'Outros', type: 'expense' }
     ];
-    
-    const insertPromises = defaultCategories.map(cat =>
-      prisma.category.upsert({
-        where: {
-          user_id_name: {
-            user_id: user.id,
-            name: cat.name
-          }
-        },
-        update: {},
-        create: {
-          name: cat.name,
-          type: cat.type,
-          user_id: user.id
-        }
-      })
-    );
-    
-    await Promise.all(insertPromises);
+
+    await prisma.category.createMany({
+      data: defaultCategories.map(cat => ({
+        name: cat.name,
+        type: cat.type,
+        user_id: user.id
+      })),
+      skipDuplicates: true
+    });
     
     await sendWelcomeEmail(user.email, user.name);
     
