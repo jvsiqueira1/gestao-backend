@@ -62,13 +62,9 @@ app.use('/api/fixed-expenses', fixedExpensesRoutes);
 const fixedIncomesRoutes = require('./routes/fixed-incomes');
 app.use('/api/fixed-incomes', fixedIncomesRoutes);
 
-
-
 app.get('/', (req, res) => {
   res.send('API de Gestão de Gastos Pessoais rodando!');
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
-});
+app.listen(PORT);
