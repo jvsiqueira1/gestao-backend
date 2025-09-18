@@ -9,11 +9,11 @@ class FinanceService {
     this.dashboardCache = new LRUCache({ max: 100, ttl: 1000 * 60 * 5 });
   }
 
-  // Função auxiliar para montar data no formato YYYY-MM-DDT00:00:00
+  // Função auxiliar para montar data no formato YYYY-MM-DDT00:00:00.000Z (UTC)
   makeLocalDate(year, month, day) {
-    const mm = String(month).padStart(2, "0");
-    const dd = String(day).padStart(2, "0");
-    return new Date(`${year}-${mm}-${dd}T00:00:00`);
+    const mm = String(month).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+    return new Date(`${year}-${mm}-${dd}T00:00:00.000Z`);
   }
 
   // Função auxiliar para parsear string de data (YYYY-MM-DD)
@@ -24,15 +24,15 @@ class FinanceService {
       return {
         year: dateStr.getFullYear(),
         month: dateStr.getMonth() + 1,
-        day: dateStr.getDate(),
+        day: dateStr.getDate()
       };
     }
 
-    if (typeof dateStr === "string") {
+    if (typeof dateStr === 'string') {
       const cleanDateStr = dateStr.trim();
 
       if (/^\d{4}-\d{2}-\d{2}$/.test(cleanDateStr)) {
-        const [year, month, day] = cleanDateStr.split("-").map(Number);
+        const [year, month, day] = cleanDateStr.split('-').map(Number);
 
         if (isNaN(year) || isNaN(month) || isNaN(day)) {
           return null;
@@ -57,7 +57,7 @@ class FinanceService {
         return {
           year: dateObj.getFullYear(),
           month: dateObj.getMonth() + 1,
-          day: dateObj.getDate(),
+          day: dateObj.getDate()
         };
       }
 
@@ -69,14 +69,14 @@ class FinanceService {
 
   async getIncomes(userId, filters = {}) {
     const { month, year, fixed } = filters;
-    const cacheKey = `income:${userId}:${month || ""}:${year || ""}:${fixed || ""}`;
+    const cacheKey = `income:${userId}:${month || ''}:${year || ''}:${fixed || ''}`;
     const cached = this.incomeCache.get(cacheKey);
     if (cached) return cached;
 
     try {
       const where = { user_id: userId };
 
-      if (fixed === "1") {
+      if (fixed === '1') {
         where.isFixed = true;
       }
 
@@ -86,7 +86,7 @@ class FinanceService {
         endDate = new Date(parseInt(year), parseInt(month), 1);
         where.date = {
           gte: startDate,
-          lt: endDate,
+          lt: endDate
         };
       }
 
@@ -94,10 +94,10 @@ class FinanceService {
         where,
         include: {
           category: {
-            select: { name: true },
-          },
+            select: { name: true }
+          }
         },
-        orderBy: { date: "desc" },
+        orderBy: { date: 'desc' }
       });
 
       const fixedIncomes = await this.prisma.income.findMany({
@@ -105,19 +105,19 @@ class FinanceService {
           user_id: userId,
           isFixed: true,
           startDate: { lte: endDate || new Date() },
-          OR: [{ endDate: null }, { endDate: { gte: startDate || new Date() } }],
+          OR: [{ endDate: null }, { endDate: { gte: startDate || new Date() } }]
         },
         include: {
-          category: { select: { name: true } },
-        },
+          category: { select: { name: true } }
+        }
       });
 
       const existingFixedIncomeIds = new Set(
-        incomes.map((i) => i.fixed_income_id).filter(Boolean)
+        incomes.map(i => i.fixed_income_id).filter(Boolean)
       );
 
       const generatedFixedIncomesWithLink = (fixedIncomes || [])
-        .map((fixed) => {
+        .map(fixed => {
           let shouldAppear = false;
           let day = 1;
           if (fixed.startDate) {
@@ -138,9 +138,9 @@ class FinanceService {
                 (recurYear === end.getFullYear() &&
                   recurMonth <= end.getMonth() + 1));
             if (inRange) {
-              if (fixed.recurrenceType === "monthly") shouldAppear = true;
+              if (fixed.recurrenceType === 'monthly') shouldAppear = true;
               if (
-                fixed.recurrenceType === "yearly" &&
+                fixed.recurrenceType === 'yearly' &&
                 start &&
                 recurMonth === start.getMonth() + 1
               )
@@ -150,7 +150,7 @@ class FinanceService {
           if (!shouldAppear) return null;
           if (existingFixedIncomeIds.has(fixed.id)) return null;
           const alreadyHasReal = incomes.some(
-            (i) =>
+            i =>
               i.isFixed &&
               i.id === fixed.id &&
               i.date &&
@@ -163,25 +163,28 @@ class FinanceService {
             month && year
               ? this.makeLocalDate(parseInt(year), parseInt(month), day)
               : fixed.startDate
-              ? new Date(fixed.startDate)
-              : new Date();
+                ? new Date(fixed.startDate)
+                : new Date();
           return {
             ...fixed,
             id: `pending-${fixed.id}-${month}-${year}`,
             date,
             pending: true,
-            category_name: fixed.category?.name || null,
+            category_name: fixed.category?.name || null
           };
         })
         .filter(Boolean);
 
-      const formattedIncomes = incomes.map((income) => ({
+      const formattedIncomes = incomes.map(income => ({
         ...income,
         category_name: income.category?.name || null,
-        pending: false,
+        pending: false
       }));
 
-      const allIncomes = [...formattedIncomes, ...generatedFixedIncomesWithLink];
+      const allIncomes = [
+        ...formattedIncomes,
+        ...generatedFixedIncomesWithLink
+      ];
       this.incomeCache.set(cacheKey, allIncomes);
       return allIncomes;
     } catch (error) {
@@ -192,14 +195,14 @@ class FinanceService {
 
   async getExpenses(userId, filters = {}) {
     const { month, year, fixed } = filters;
-    const cacheKey = `expense:${userId}:${month || ""}:${year || ""}:${fixed || ""}`;
+    const cacheKey = `expense:${userId}:${month || ''}:${year || ''}:${fixed || ''}`;
     const cached = this.expenseCache.get(cacheKey);
     if (cached) return cached;
 
     try {
       const where = { user_id: userId };
 
-      if (fixed === "1") {
+      if (fixed === '1') {
         where.isFixed = true;
       }
 
@@ -209,7 +212,7 @@ class FinanceService {
         endDate = new Date(parseInt(year), parseInt(month), 1);
         where.date = {
           gte: startDate,
-          lt: endDate,
+          lt: endDate
         };
       }
 
@@ -217,10 +220,10 @@ class FinanceService {
         where,
         include: {
           category: {
-            select: { name: true },
-          },
+            select: { name: true }
+          }
         },
-        orderBy: { date: "desc" },
+        orderBy: { date: 'desc' }
       });
 
       const fixedExpenses = await this.prisma.expense.findMany({
@@ -228,19 +231,19 @@ class FinanceService {
           user_id: userId,
           isFixed: true,
           startDate: { lte: endDate || new Date() },
-          OR: [{ endDate: null }, { endDate: { gte: startDate || new Date() } }],
+          OR: [{ endDate: null }, { endDate: { gte: startDate || new Date() } }]
         },
         include: {
-          category: { select: { name: true } },
-        },
+          category: { select: { name: true } }
+        }
       });
 
       const existingFixedExpenseIds = new Set(
-        expenses.map((i) => i.fixed_expense_id).filter(Boolean)
+        expenses.map(i => i.fixed_expense_id).filter(Boolean)
       );
 
       const generatedFixedExpensesWithLink = (fixedExpenses || [])
-        .map((fixed) => {
+        .map(fixed => {
           let shouldAppear = false;
           let day = 1;
           if (fixed.startDate) {
@@ -261,9 +264,9 @@ class FinanceService {
                 (recurYear === end.getFullYear() &&
                   recurMonth <= end.getMonth() + 1));
             if (inRange) {
-              if (fixed.recurrenceType === "monthly") shouldAppear = true;
+              if (fixed.recurrenceType === 'monthly') shouldAppear = true;
               if (
-                fixed.recurrenceType === "yearly" &&
+                fixed.recurrenceType === 'yearly' &&
                 start &&
                 recurMonth === start.getMonth() + 1
               )
@@ -273,7 +276,7 @@ class FinanceService {
           if (!shouldAppear) return null;
           if (existingFixedExpenseIds.has(fixed.id)) return null;
           const alreadyHasReal = expenses.some(
-            (i) =>
+            i =>
               i.isFixed &&
               i.id === fixed.id &&
               i.date &&
@@ -286,25 +289,28 @@ class FinanceService {
             month && year
               ? this.makeLocalDate(parseInt(year), parseInt(month), day)
               : fixed.startDate
-              ? new Date(fixed.startDate)
-              : new Date();
+                ? new Date(fixed.startDate)
+                : new Date();
           return {
             ...fixed,
             id: `pending-${fixed.id}-${month}-${year}`,
             date,
             pending: true,
-            category_name: fixed.category?.name || null,
+            category_name: fixed.category?.name || null
           };
         })
         .filter(Boolean);
 
-      const formattedExpenses = expenses.map((expense) => ({
+      const formattedExpenses = expenses.map(expense => ({
         ...expense,
         category_name: expense.category?.name || null,
-        pending: false,
+        pending: false
       }));
 
-      const allExpenses = [...formattedExpenses, ...generatedFixedExpensesWithLink];
+      const allExpenses = [
+        ...formattedExpenses,
+        ...generatedFixedExpensesWithLink
+      ];
       this.expenseCache.set(cacheKey, allExpenses);
       return allExpenses;
     } catch (error) {
@@ -314,7 +320,7 @@ class FinanceService {
   }
 
   async getDashboardData(userId, month, year) {
-    const cacheKey = `dashboard:${userId}:${month || ""}:${year || ""}`;
+    const cacheKey = `dashboard:${userId}:${month || ''}:${year || ''}`;
     const cached = this.dashboardCache.get(cacheKey);
     if (cached) return cached;
 
@@ -327,11 +333,15 @@ class FinanceService {
         parseInt(currentMonth) - 1,
         1
       );
-      const endDate = new Date(parseInt(currentYear), parseInt(currentMonth), 1);
+      const endDate = new Date(
+        parseInt(currentYear),
+        parseInt(currentMonth),
+        1
+      );
 
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
-        select: { created_at: true },
+        select: { created_at: true }
       });
 
       const [incomeResult, expenseResult] = await Promise.all([
@@ -340,21 +350,21 @@ class FinanceService {
             user_id: userId,
             date: {
               gte: startDate,
-              lt: endDate,
-            },
+              lt: endDate
+            }
           },
-          _sum: { value: true },
+          _sum: { value: true }
         }),
         this.prisma.expense.aggregate({
           where: {
             user_id: userId,
             date: {
               gte: startDate,
-              lt: endDate,
-            },
+              lt: endDate
+            }
           },
-          _sum: { value: true },
-        }),
+          _sum: { value: true }
+        })
       ]);
 
       const yearStart = new Date(parseInt(currentYear), 0, 1);
@@ -389,23 +399,33 @@ class FinanceService {
         ORDER BY total_value DESC
       `;
 
-      const formattedCategoryData = categoryData.map((cat) => ({
+      const formattedCategoryData = categoryData.map(cat => ({
         name: cat.category_name,
-        value: parseFloat(cat.total_value) || 0,
+        value: parseFloat(cat.total_value) || 0
       }));
 
       const monthNames = [
-        "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-        "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+        'Jan',
+        'Fev',
+        'Mar',
+        'Abr',
+        'Mai',
+        'Jun',
+        'Jul',
+        'Ago',
+        'Set',
+        'Out',
+        'Nov',
+        'Dez'
       ];
 
       const processedMonthlyData = [];
       for (let i = 1; i <= 12; i++) {
-        const monthData = monthlyData.find((row) => parseInt(row.month) === i);
+        const monthData = monthlyData.find(row => parseInt(row.month) === i);
         processedMonthlyData.push({
           month: monthNames[i - 1],
           income: monthData ? parseFloat(monthData.income) || 0 : 0,
-          expense: monthData ? parseFloat(monthData.expense) || 0 : 0,
+          expense: monthData ? parseFloat(monthData.expense) || 0 : 0
         });
       }
 
@@ -422,7 +442,7 @@ class FinanceService {
         userCreatedYear: user.created_at.getFullYear(),
         userCreatedMonth: user.created_at.getMonth() + 1,
         currentMonth: parseInt(currentMonth),
-        currentYear: parseInt(currentYear),
+        currentYear: parseInt(currentYear)
       };
 
       this.dashboardCache.set(cacheKey, responseData);
@@ -447,37 +467,58 @@ class FinanceService {
         const categoryExists = await this.prisma.category.findFirst({
           where: {
             id: parseInt(incomeData.category_id),
-            user_id: userId,
-          },
+            user_id: userId
+          }
         });
         if (!categoryExists) {
           throw new Error('Categoria não encontrada.');
         }
       }
 
-      const isFixedBool = incomeData.isFixed === true || incomeData.isFixed === "true" || 
-                         incomeData.isFixed === 1 || incomeData.isFixed === "1";
+      const isFixedBool =
+        incomeData.isFixed === true ||
+        incomeData.isFixed === 'true' ||
+        incomeData.isFixed === 1 ||
+        incomeData.isFixed === '1';
 
       const income = await this.prisma.income.create({
         data: {
           description: incomeData.description,
           value: parseFloat(incomeData.value),
-          date: this.makeLocalDate(parsedDate.year, parsedDate.month, parsedDate.day),
+          date: this.makeLocalDate(
+            parsedDate.year,
+            parsedDate.month,
+            parsedDate.day
+          ),
           user_id: userId,
-          category_id: incomeData.category_id ? parseInt(incomeData.category_id) : null,
+          category_id: incomeData.category_id
+            ? parseInt(incomeData.category_id)
+            : null,
           isFixed: isFixedBool,
           recurrenceType: isFixedBool ? incomeData.recurrenceType : null,
-          startDate: isFixedBool && parsedStartDate
-            ? this.makeLocalDate(parsedStartDate.year, parsedStartDate.month, parsedStartDate.day)
-            : null,
-          endDate: isFixedBool && parsedEndDate
-            ? this.makeLocalDate(parsedEndDate.year, parsedEndDate.month, parsedEndDate.day)
-            : null,
-          fixed_income_id: incomeData.fixed_income_id ? parseInt(incomeData.fixed_income_id) : null,
+          startDate:
+            isFixedBool && parsedStartDate
+              ? this.makeLocalDate(
+                  parsedStartDate.year,
+                  parsedStartDate.month,
+                  parsedStartDate.day
+                )
+              : null,
+          endDate:
+            isFixedBool && parsedEndDate
+              ? this.makeLocalDate(
+                  parsedEndDate.year,
+                  parsedEndDate.month,
+                  parsedEndDate.day
+                )
+              : null,
+          fixed_income_id: incomeData.fixed_income_id
+            ? parseInt(incomeData.fixed_income_id)
+            : null
         },
         include: {
-          category: { select: { name: true } },
-        },
+          category: { select: { name: true } }
+        }
       });
 
       this.incomeCache.clear();
@@ -502,37 +543,58 @@ class FinanceService {
         const categoryExists = await this.prisma.category.findFirst({
           where: {
             id: parseInt(expenseData.category_id),
-            user_id: userId,
-          },
+            user_id: userId
+          }
         });
         if (!categoryExists) {
           throw new Error('Categoria não encontrada.');
         }
       }
 
-      const isFixedBool = expenseData.isFixed === true || expenseData.isFixed === "true" || 
-                         expenseData.isFixed === 1 || expenseData.isFixed === "1";
+      const isFixedBool =
+        expenseData.isFixed === true ||
+        expenseData.isFixed === 'true' ||
+        expenseData.isFixed === 1 ||
+        expenseData.isFixed === '1';
 
       const expense = await this.prisma.expense.create({
         data: {
           description: expenseData.description,
           value: parseFloat(expenseData.value),
-          date: this.makeLocalDate(parsedDate.year, parsedDate.month, parsedDate.day),
+          date: this.makeLocalDate(
+            parsedDate.year,
+            parsedDate.month,
+            parsedDate.day
+          ),
           user_id: userId,
-          category_id: expenseData.category_id ? parseInt(expenseData.category_id) : null,
+          category_id: expenseData.category_id
+            ? parseInt(expenseData.category_id)
+            : null,
           isFixed: isFixedBool,
           recurrenceType: isFixedBool ? expenseData.recurrenceType : null,
-          startDate: isFixedBool && parsedStartDate
-            ? this.makeLocalDate(parsedStartDate.year, parsedStartDate.month, parsedStartDate.day)
-            : null,
-          endDate: isFixedBool && parsedEndDate
-            ? this.makeLocalDate(parsedEndDate.year, parsedEndDate.month, parsedEndDate.day)
-            : null,
-          fixed_expense_id: expenseData.fixed_expense_id ? parseInt(expenseData.fixed_expense_id) : null,
+          startDate:
+            isFixedBool && parsedStartDate
+              ? this.makeLocalDate(
+                  parsedStartDate.year,
+                  parsedStartDate.month,
+                  parsedStartDate.day
+                )
+              : null,
+          endDate:
+            isFixedBool && parsedEndDate
+              ? this.makeLocalDate(
+                  parsedEndDate.year,
+                  parsedEndDate.month,
+                  parsedEndDate.day
+                )
+              : null,
+          fixed_expense_id: expenseData.fixed_expense_id
+            ? parseInt(expenseData.fixed_expense_id)
+            : null
         },
         include: {
-          category: { select: { name: true } },
-        },
+          category: { select: { name: true } }
+        }
       });
 
       this.expenseCache.clear();
@@ -548,28 +610,30 @@ class FinanceService {
       const income = await this.prisma.income.update({
         where: {
           id: parseInt(incomeId),
-          user_id: userId,
+          user_id: userId
         },
         data: {
           description: incomeData.description,
           value: parseFloat(incomeData.value),
           date: new Date(incomeData.date),
-          category_id: incomeData.category_id ? parseInt(incomeData.category_id) : null,
+          category_id: incomeData.category_id
+            ? parseInt(incomeData.category_id)
+            : null
         },
         include: {
-          category: { select: { name: true } },
-        },
+          category: { select: { name: true } }
+        }
       });
 
       const formattedIncome = {
         ...income,
-        category_name: income.category?.name || null,
+        category_name: income.category?.name || null
       };
 
       this.incomeCache.clear();
       return formattedIncome;
     } catch (error) {
-      if (error.code === "P2025") {
+      if (error.code === 'P2025') {
         throw new Error('Renda não encontrada.');
       }
       console.error('Erro ao editar renda:', error);
@@ -582,28 +646,30 @@ class FinanceService {
       const expense = await this.prisma.expense.update({
         where: {
           id: parseInt(expenseId),
-          user_id: userId,
+          user_id: userId
         },
         data: {
           description: expenseData.description,
           value: parseFloat(expenseData.value),
           date: new Date(expenseData.date),
-          category_id: expenseData.category_id ? parseInt(expenseData.category_id) : null,
+          category_id: expenseData.category_id
+            ? parseInt(expenseData.category_id)
+            : null
         },
         include: {
-          category: { select: { name: true } },
-        },
+          category: { select: { name: true } }
+        }
       });
 
       const formattedExpense = {
         ...expense,
-        category_name: expense.category?.name || null,
+        category_name: expense.category?.name || null
       };
 
       this.expenseCache.clear();
       return formattedExpense;
     } catch (error) {
-      if (error.code === "P2025") {
+      if (error.code === 'P2025') {
         throw new Error('Despesa não encontrada.');
       }
       console.error('Erro ao editar despesa:', error);
@@ -616,14 +682,14 @@ class FinanceService {
       await this.prisma.income.delete({
         where: {
           id: parseInt(incomeId),
-          user_id: userId,
-        },
+          user_id: userId
+        }
       });
 
       this.incomeCache.clear();
       return { success: true };
     } catch (error) {
-      if (error.code === "P2025") {
+      if (error.code === 'P2025') {
         throw new Error('Renda não encontrada.');
       }
       console.error('Erro ao excluir renda:', error);
@@ -636,14 +702,14 @@ class FinanceService {
       await this.prisma.expense.delete({
         where: {
           id: parseInt(expenseId),
-          user_id: userId,
-        },
+          user_id: userId
+        }
       });
 
       this.expenseCache.clear();
       return { success: true };
     } catch (error) {
-      if (error.code === "P2025") {
+      if (error.code === 'P2025') {
         throw new Error('Despesa não encontrada.');
       }
       console.error('Erro ao excluir despesa:', error);
