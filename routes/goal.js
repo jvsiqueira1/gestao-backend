@@ -1,6 +1,6 @@
 const express = require('express');
-const prisma = require('../lib/prisma');
-const authMiddleware = require('../middleware/authMiddleware');
+const prismaService = require('../services/prisma.service');
+const authMiddleware = require('../middleware/auth_middleware');
 const { LRUCache } = require('lru-cache');
 
 const router = express.Router();
@@ -13,6 +13,7 @@ router.get('/', authMiddleware, async (req, res) => {
   const cached = goalsCache.get(cacheKey);
   if (cached) return res.json(cached);
   try {
+    const prisma = prismaService.getClient();
     const goals = await prisma.financialGoal.findMany({
       where: { user_id: req.user.id },
       orderBy: { created_at: 'desc' }
@@ -28,9 +29,12 @@ router.get('/', authMiddleware, async (req, res) => {
 router.post('/', authMiddleware, async (req, res) => {
   const { name, description, target, deadline } = req.body;
   if (!name || !target) {
-    return res.status(400).json({ error: 'Nome e valor objetivo são obrigatórios.' });
+    return res
+      .status(400)
+      .json({ error: 'Nome e valor objetivo são obrigatórios.' });
   }
   try {
+    const prisma = prismaService.getClient();
     const goal = await prisma.financialGoal.create({
       data: {
         user_id: req.user.id,
@@ -52,6 +56,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
   const { id } = req.params;
   const { name, description, target, deadline, status } = req.body;
   try {
+    const prisma = prismaService.getClient();
     const goal = await prisma.financialGoal.update({
       where: { id: Number(id), user_id: req.user.id },
       data: {
@@ -73,6 +78,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
 router.delete('/:id', authMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
+    const prisma = prismaService.getClient();
     await prisma.financialGoal.delete({
       where: { id: Number(id), user_id: req.user.id }
     });
@@ -91,6 +97,7 @@ router.post('/:id/add', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'Valor a adicionar é obrigatório.' });
   }
   try {
+    const prisma = prismaService.getClient();
     const goal = await prisma.financialGoal.update({
       where: { id: Number(id), user_id: req.user.id },
       data: {
@@ -104,4 +111,4 @@ router.post('/:id/add', authMiddleware, async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

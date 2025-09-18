@@ -1,6 +1,6 @@
 const express = require('express');
-const prisma = require('../lib/prisma');
-const authMiddleware = require('../middleware/authMiddleware');
+const prismaService = require('../services/prisma.service');
+const authMiddleware = require('../middleware/auth_middleware');
 const { LRUCache } = require('lru-cache');
 
 const router = express.Router();
@@ -21,6 +21,7 @@ router.get('/', authMiddleware, async (req, res) => {
   }
   
   try {
+    const prisma = prismaService.getClient();
     const where = {
       user_id: req.user.id
     };
@@ -58,6 +59,7 @@ router.post('/', authMiddleware, async (req, res) => {
   }
   
   try {
+    const prisma = prismaService.getClient();
     const category = await prisma.category.create({
       data: {
         name,
@@ -93,6 +95,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'Nome é obrigatório.' });
   }
   try {
+    const prisma = prismaService.getClient();
     const category = await prisma.category.update({
       where: {
         id: parseInt(id),
@@ -119,6 +122,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
 router.delete('/:id', authMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
+    const prisma = prismaService.getClient();
     await prisma.category.delete({
       where: {
         id: parseInt(id),

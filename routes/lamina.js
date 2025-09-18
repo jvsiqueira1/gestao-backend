@@ -1,6 +1,6 @@
 const express = require('express');
-const { testarEnvioRelatorios } = require('../cron/laminaCron');
-const authMiddleware = require('../middleware/authMiddleware');
+const { testarEnvioRelatorios } = require('../cron/lamina_cron');
+const authMiddleware = require('../middleware/auth_middleware');
 
 const router = express.Router();
 

@@ -1,11 +1,21 @@
-const { generateLaminaHTML } = require('../utils/laminaGenerator');
-const { generatePDFFromHTML } = require('../utils/pdfGenerator');
-const prisma = require('../lib/prisma');
+const { generateLaminaHTML } = require('../utils/lamina_generator');
+const { generatePDFFromHTML } = require('../utils/pdf_generator');
+const prismaService = require('./prisma.service');
 
-const getMonthName = (month) => {
+const _getMonthName = month => {
   const months = [
-    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    'Janeiro',
+    'Fevereiro',
+    'Março',
+    'Abril',
+    'Maio',
+    'Junho',
+    'Julho',
+    'Agosto',
+    'Setembro',
+    'Outubro',
+    'Novembro',
+    'Dezembro'
   ];
   return months[month - 1];
 };
@@ -17,6 +27,7 @@ async function buscarDadosDoMesAnterior(userId, mes, ano) {
     const endDate = new Date(ano, mes, 1);
 
     // Buscar receitas do mês
+    const prisma = prismaService.getClient();
     const incomes = await prisma.income.findMany({
       where: {
         user_id: userId,
@@ -49,8 +60,14 @@ async function buscarDadosDoMesAnterior(userId, mes, ano) {
     });
 
     // Calcular totais
-    const monthlyIncome = incomes.reduce((sum, income) => sum + parseFloat(income.value), 0);
-    const monthlyExpense = expenses.reduce((sum, expense) => sum + parseFloat(expense.value), 0);
+    const monthlyIncome = incomes.reduce(
+      (sum, income) => sum + parseFloat(income.value),
+      0
+    );
+    const monthlyExpense = expenses.reduce(
+      (sum, expense) => sum + parseFloat(expense.value),
+      0
+    );
 
     // Buscar dados de categoria para despesas
     const categoryData = await prisma.expense.groupBy({
@@ -104,6 +121,7 @@ async function buscarTransacoesDoMes(userId, mes, ano) {
     const endDate = new Date(ano, mes, 1);
 
     // Buscar receitas
+    const prisma = prismaService.getClient();
     const incomes = await prisma.income.findMany({
       where: {
         user_id: userId,
@@ -159,6 +177,7 @@ async function buscarTransacoesDoMes(userId, mes, ano) {
 // Função para buscar todos os usuários
 async function buscarTodosUsuarios() {
   try {
+    const prisma = prismaService.getClient();
     const users = await prisma.user.findMany({
       select: {
         id: true,
@@ -174,15 +193,13 @@ async function buscarTodosUsuarios() {
 }
 
 // Função para enviar e-mail com PDF
-async function enviarEmailComPdf(destinatario, pdfBuffer, mes, ano) {
+async function enviarEmailComPdf(_destinatario, _pdfBuffer, _mes, _ano) {
   // Aqui você deve usar seu serviço de e-mail já configurado
   // Exemplo com nodemailer:
-  
   // const nodemailer = require('nodemailer');
   // const transporter = nodemailer.createTransporter({
   //   // Sua configuração de e-mail
   // });
-  
   // await transporter.sendMail({
   //   from: process.env.EMAIL_FROM || 'seu@email.com',
   //   to: destinatario,
@@ -196,21 +213,25 @@ async function enviarEmailComPdf(destinatario, pdfBuffer, mes, ano) {
   //     }
   //   ]
   // });
-  
 }
 
 // Função para enviar relatório individual
 async function enviarRelatorioMensal(usuario, dados, laminaData, mes, ano) {
   try {
     // Gerar HTML da lâmina
-    const htmlContent = generateLaminaHTML(dados, laminaData, usuario, mes, ano);
-    
+    const htmlContent = generateLaminaHTML(
+      dados,
+      laminaData,
+      usuario,
+      mes,
+      ano
+    );
+
     // Gerar PDF
     const pdfBuffer = await generatePDFFromHTML(htmlContent);
-    
+
     // Enviar e-mail
     await enviarEmailComPdf(usuario.email, pdfBuffer, mes, ano);
-    
   } catch (error) {
     console.error(`Erro ao enviar relatório para ${usuario.email}:`, error);
   }
@@ -223,28 +244,27 @@ async function enviarRelatoriosMensais() {
     mesAnterior.setMonth(mesAnterior.getMonth() - 1);
     const mes = mesAnterior.getMonth() + 1;
     const ano = mesAnterior.getFullYear();
-    
+
     const usuarios = await buscarTodosUsuarios();
-    
+
     for (const usuario of usuarios) {
       // Buscar dados do mês anterior
       const dados = await buscarDadosDoMesAnterior(usuario.id, mes, ano);
       const laminaData = await buscarTransacoesDoMes(usuario.id, mes, ano);
-      
+
       if (dados && laminaData) {
         await enviarRelatorioMensal(usuario, dados, laminaData, mes, ano);
       }
     }
-    
   } catch (error) {
     console.error('Erro ao enviar relatórios mensais:', error);
   }
 }
 
-module.exports = { 
+module.exports = {
   enviarRelatoriosMensais,
   enviarRelatorioMensal,
   buscarDadosDoMesAnterior,
   buscarTransacoesDoMes,
   buscarTodosUsuarios
-}; 
+};

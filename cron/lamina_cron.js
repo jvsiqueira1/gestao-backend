@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { enviarRelatoriosMensais } = require('../services/laminaEmailService');
+const { enviarRelatoriosMensais } = require('../services/lamina_email_service');
 
 // Executa todo dia 01 às 8h da manhã
 cron.schedule('0 8 1 * *', async () => {

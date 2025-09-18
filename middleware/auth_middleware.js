@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const prisma = require('../lib/prisma');
+const prismaService = require('../services/prisma.service');
 
 module.exports = async function (req, res, next) {
   let token;
@@ -28,6 +28,7 @@ module.exports = async function (req, res, next) {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userId = decoded.userId;
     
+    const prisma = prismaService.getClient();
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -88,6 +89,7 @@ module.exports.requireAuth = async function (req, res, next) {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const userId = decoded.userId;
+    const prisma = prismaService.getClient();
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {

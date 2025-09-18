@@ -1,6 +1,6 @@
 const express = require('express');
-const prisma = require('../lib/prisma');
-const authMiddleware = require('../middleware/authMiddleware');
+const prismaService = require('../services/prisma.service');
+const authMiddleware = require('../middleware/auth_middleware');
 const { LRUCache } = require('lru-cache');
 
 const router = express.Router();
@@ -21,12 +21,13 @@ function invalidateUserCache(cache, prefix, userId) {
 // Adicionar renda
 router.post('/income', authMiddleware, async (req, res) => {
   const { value, description, date, category_id } = req.body;
-  
+
   if (!value || !date) {
     return res.status(400).json({ error: 'Valor e data são obrigatórios.' });
   }
-  
+
   try {
+    const prisma = prismaService.getClient();
     const income = await prisma.income.create({
       data: {
         user_id: req.user.id,
@@ -39,12 +40,12 @@ router.post('/income', authMiddleware, async (req, res) => {
         category: true
       }
     });
-    
+
     invalidateUserCache(incomeCache, 'income', req.user.id);
     invalidateUserCache(dashboardCache, 'dashboard', req.user.id);
     res.status(201).json(income);
   } catch (err) {
-    console.error("Erro detalhado ao criar receita: ", err);
+    console.error('Erro detalhado ao criar receita: ', err);
     res.status(500).json({ error: 'Erro ao adicionar renda.' });
   }
 });
@@ -56,17 +57,18 @@ router.get('/income', authMiddleware, async (req, res) => {
   const cached = incomeCache.get(cacheKey);
   if (cached) return res.json(cached);
   try {
+    const prisma = prismaService.getClient();
     const where = {
       user_id: req.user.id
     };
-    
+
     if (month && year) {
       where.date = {
         gte: new Date(parseInt(year), parseInt(month) - 1, 1),
         lt: new Date(parseInt(year), parseInt(month), 1)
       };
     }
-    
+
     const incomes = await prisma.income.findMany({
       where,
       include: {
@@ -76,13 +78,13 @@ router.get('/income', authMiddleware, async (req, res) => {
         date: 'desc'
       }
     });
-    
+
     // Adicionar category_name para compatibilidade com frontend
     const incomesWithCategoryName = incomes.map(income => ({
       ...income,
       category_name: income.category?.name || null
     }));
-    
+
     incomeCache.set(cacheKey, incomesWithCategoryName);
     res.json(incomesWithCategoryName);
   } catch (err) {
@@ -94,12 +96,15 @@ router.get('/income', authMiddleware, async (req, res) => {
 // Adicionar despesa
 router.post('/expense', authMiddleware, async (req, res) => {
   const { value, description, date, category_id } = req.body;
-  
+
   if (!value || !date || !category_id) {
-    return res.status(400).json({ error: 'Valor, data e categoria são obrigatórios.' });
+    return res
+      .status(400)
+      .json({ error: 'Valor, data e categoria são obrigatórios.' });
   }
-  
+
   try {
+    const prisma = prismaService.getClient();
     const expense = await prisma.expense.create({
       data: {
         user_id: req.user.id,
@@ -112,12 +117,12 @@ router.post('/expense', authMiddleware, async (req, res) => {
         category: true
       }
     });
-    
+
     invalidateUserCache(expenseCache, 'expense', req.user.id);
     invalidateUserCache(dashboardCache, 'dashboard', req.user.id);
     res.status(201).json(expense);
   } catch (err) {
-    console.error("Erro detalhado ao criar despesa: ", err);
+    console.error('Erro detalhado ao criar despesa: ', err);
     res.status(500).json({ error: 'Erro ao adicionar despesa.' });
   }
 });
@@ -129,17 +134,18 @@ router.get('/expense', authMiddleware, async (req, res) => {
   const cached = expenseCache.get(cacheKey);
   if (cached) return res.json(cached);
   try {
+    const prisma = prismaService.getClient();
     const where = {
       user_id: req.user.id
     };
-    
+
     if (month && year) {
       where.date = {
         gte: new Date(parseInt(year), parseInt(month) - 1, 1),
         lt: new Date(parseInt(year), parseInt(month), 1)
       };
     }
-    
+
     const expenses = await prisma.expense.findMany({
       where,
       include: {
@@ -149,13 +155,13 @@ router.get('/expense', authMiddleware, async (req, res) => {
         date: 'desc'
       }
     });
-    
+
     // Adicionar category_name para compatibilidade com frontend
     const expensesWithCategoryName = expenses.map(expense => ({
       ...expense,
       category_name: expense.category?.name || null
     }));
-    
+
     expenseCache.set(cacheKey, expensesWithCategoryName);
     res.json(expensesWithCategoryName);
   } catch (err) {
@@ -171,23 +177,28 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
   const cached = dashboardCache.get(cacheKey);
   if (cached) return res.json(cached);
   try {
+    const prisma = prismaService.getClient();
     // Buscar dados do usuário para obter a data de cadastro
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
       select: { created_at: true }
     });
-    
+
     const userCreatedAt = user.created_at;
     const userCreatedYear = new Date(userCreatedAt).getFullYear();
     const userCreatedMonth = new Date(userCreatedAt).getMonth() + 1;
-    
+
     // Se não foram fornecidos mês e ano, usar o mês/ano atual
     const currentMonth = month || new Date().getMonth() + 1;
     const currentYear = year || new Date().getFullYear();
-    
-    const startDate = new Date(parseInt(currentYear), parseInt(currentMonth) - 1, 1);
+
+    const startDate = new Date(
+      parseInt(currentYear),
+      parseInt(currentMonth) - 1,
+      1
+    );
     const endDate = new Date(parseInt(currentYear), parseInt(currentMonth), 1);
-    
+
     // Buscar dados do mês atual
     const [incomeResult, expenseResult] = await Promise.all([
       prisma.income.aggregate({
@@ -215,14 +226,14 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
         }
       })
     ]);
-    
+
     const monthlyIncome = incomeResult._sum.value || 0;
     const monthlyExpense = expenseResult._sum.value || 0;
-    
+
     // Buscar dados mensais do ano selecionado
     const yearStart = new Date(parseInt(currentYear), 0, 1);
     const yearEnd = new Date(parseInt(currentYear) + 1, 0, 1);
-    
+
     const monthlyDataRaw = await prisma.$queryRaw`
       SELECT 
         EXTRACT(MONTH FROM date) as month,
@@ -237,7 +248,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
       GROUP BY EXTRACT(MONTH FROM date), EXTRACT(YEAR FROM date)
       ORDER BY month
     `;
-    
+
     // Buscar dados de categorias para o mês selecionado
     const categoryData = await prisma.category.findMany({
       where: {
@@ -255,14 +266,24 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
         }
       }
     });
-    
+
     // Processar dados mensais
     const monthlyData = [];
     const monthNames = [
-      'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
-      'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
+      'Jan',
+      'Fev',
+      'Mar',
+      'Abr',
+      'Mai',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Set',
+      'Out',
+      'Nov',
+      'Dez'
     ];
-    
+
     // Criar array com todos os meses do ano
     for (let i = 1; i <= 12; i++) {
       const monthData = monthlyDataRaw.find(row => parseInt(row.month) === i);
@@ -272,18 +293,21 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
         expense: monthData ? parseFloat(monthData.expense) : 0
       });
     }
-    
+
     const saldo = monthlyIncome - monthlyExpense;
-    
+
     // Processar dados de categorias
     const categoryDataProcessed = categoryData
       .map(category => ({
         name: category.name,
-        value: category.expenses.reduce((sum, expense) => sum + expense.value, 0)
+        value: category.expenses.reduce(
+          (sum, expense) => sum + expense.value,
+          0
+        )
       }))
       .filter(category => category.value > 0)
       .sort((a, b) => b.value - a.value);
-    
+
     const responseData = {
       monthlyIncome,
       monthlyExpense,
@@ -296,7 +320,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
       currentMonth: parseInt(currentMonth),
       currentYear: parseInt(currentYear)
     };
-    
+
     dashboardCache.set(cacheKey, responseData);
     res.json(responseData);
   } catch (err) {
@@ -310,6 +334,7 @@ router.put('/income/:id', authMiddleware, async (req, res) => {
   const { value, description, date, category_id } = req.body;
   const { id } = req.params;
   try {
+    const prisma = prismaService.getClient();
     const income = await prisma.income.update({
       where: {
         id: parseInt(id),
@@ -341,6 +366,7 @@ router.put('/income/:id', authMiddleware, async (req, res) => {
 router.delete('/income/:id', authMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
+    const prisma = prismaService.getClient();
     await prisma.income.delete({
       where: {
         id: parseInt(id),
@@ -364,6 +390,7 @@ router.put('/expense/:id', authMiddleware, async (req, res) => {
   const { value, description, date, category_id } = req.body;
   const { id } = req.params;
   try {
+    const prisma = prismaService.getClient();
     const expense = await prisma.expense.update({
       where: {
         id: parseInt(id),
@@ -395,6 +422,7 @@ router.put('/expense/:id', authMiddleware, async (req, res) => {
 router.delete('/expense/:id', authMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
+    const prisma = prismaService.getClient();
     await prisma.expense.delete({
       where: {
         id: parseInt(id),
@@ -413,4 +441,4 @@ router.delete('/expense/:id', authMiddleware, async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

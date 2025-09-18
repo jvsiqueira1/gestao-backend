@@ -1,5 +1,5 @@
 const express = require('express');
-const authMiddleware = require('../middleware/authMiddleware');
+const authMiddleware = require('../middleware/auth_middleware');
 const { LRUCache } = require('lru-cache');
 
 const router = express.Router();

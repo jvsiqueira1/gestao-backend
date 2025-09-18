@@ -1,9 +1,8 @@
 const express = require('express');
-const { PrismaClient } = require('@prisma/client');
-const authMiddleware = require('../middleware/authMiddleware');
+const prismaService = require('../services/prisma.service');
+const authMiddleware = require('../middleware/auth_middleware');
 
 const router = express.Router();
-const prisma = new PrismaClient();
 
 // Middleware de autenticação
 router.use(authMiddleware);
@@ -12,7 +11,8 @@ router.use(authMiddleware);
 router.get('/', async (req, res) => {
   try {
     const userId = req.user.id;
-    
+    const prisma = prismaService.getClient();
+
     const fixedIncomes = await prisma.income.findMany({
       where: {
         user_id: userId,
@@ -39,6 +39,7 @@ router.get('/:id', async (req, res) => {
   try {
     const userId = req.user.id;
     const incomeId = parseInt(req.params.id);
+    const prisma = prismaService.getClient();
 
     const fixedIncome = await prisma.income.findFirst({
       where: {
@@ -67,6 +68,7 @@ router.get('/:id/history', async (req, res) => {
   try {
     const userId = req.user.id;
     const incomeId = parseInt(req.params.id);
+    const prisma = prismaService.getClient();
 
     // Verificar se a renda fixa existe e pertence ao usuário
     const fixedIncome = await prisma.income.findFirst({
@@ -115,15 +117,15 @@ router.get('/:id/history', async (req, res) => {
     });
 
     // Combinar os históricos e remover duplicatas
-    let allHistory = [...linkedHistory, ...similarHistory];
+    const allHistory = [...linkedHistory, ...similarHistory];
     // Remover duplicatas baseado no ID
-    const uniqueHistory = allHistory.filter((item, index, self) => 
-      index === self.findIndex(t => t.id === item.id)
+    const uniqueHistory = allHistory.filter(
+      (item, index, self) => index === self.findIndex(t => t.id === item.id)
     );
 
     // Ordenar por data (mais recente primeiro)
-    const sortedHistory = uniqueHistory.sort((a, b) => 
-      new Date(b.date).getTime() - new Date(a.date).getTime()
+    const sortedHistory = uniqueHistory.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
 
     res.json(sortedHistory);
@@ -137,10 +139,20 @@ router.get('/:id/history', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const userId = req.user.id;
-    const { description, value, category_id, recurrenceType, startDate, endDate } = req.body;
+    const {
+      description,
+      value,
+      category_id,
+      recurrenceType,
+      startDate,
+      endDate
+    } = req.body;
+    const prisma = prismaService.getClient();
 
     if (!description || !value || !recurrenceType) {
-      return res.status(400).json({ error: 'Descrição, valor e tipo de recorrência são obrigatórios' });
+      return res.status(400).json({
+        error: 'Descrição, valor e tipo de recorrência são obrigatórios'
+      });
     }
 
     // Criar a receita fixa
@@ -173,7 +185,15 @@ router.put('/:id', async (req, res) => {
   try {
     const userId = req.user.id;
     const incomeId = parseInt(req.params.id);
-    const { description, value, category_id, recurrenceType, startDate, endDate } = req.body;
+    const {
+      description,
+      value,
+      category_id,
+      recurrenceType,
+      startDate,
+      endDate
+    } = req.body;
+    const prisma = prismaService.getClient();
 
     // Verificar se a renda fixa existe e pertence ao usuário
     const existingIncome = await prisma.income.findFirst({
@@ -216,6 +236,7 @@ router.delete('/:id', async (req, res) => {
   try {
     const userId = req.user.id;
     const incomeId = parseInt(req.params.id);
+    const prisma = prismaService.getClient();
 
     // Verificar se a renda fixa existe e pertence ao usuário
     const existingIncome = await prisma.income.findFirst({
@@ -250,4 +271,4 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;
