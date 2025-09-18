@@ -11,16 +11,16 @@ class AuthService {
   }
 
   async sendWelcomeEmail(to, nome) {
-    const transporter = nodemailer.createTransporter({
+    const transporter = nodemailer.createTransport({
       host: 'smtp.zoho.com',
       port: 465,
       secure: true,
       auth: {
         user: process.env.ZOHO_USER,
-        pass: process.env.ZOHO_PASS,
-      },
+        pass: process.env.ZOHO_PASS
+      }
     });
-    
+
     await transporter.sendMail({
       from: `"Gestão de Gastos" <${process.env.ZOHO_USER}>`,
       to,
@@ -43,23 +43,23 @@ class AuthService {
             <div style="margin-top: 32px; text-align: center; color: #aaa; font-size: 0.9em;">Equipe Gestão de Gastos</div>
           </div>
         </div>
-      `,
+      `
     });
   }
 
   async sendPasswordResetEmail(to, nome, token) {
-    const transporter = nodemailer.createTransporter({
+    const transporter = nodemailer.createTransport({
       host: 'smtp.zoho.com',
       port: 465,
       secure: true,
       auth: {
         user: process.env.ZOHO_USER,
-        pass: process.env.ZOHO_PASS,
-      },
+        pass: process.env.ZOHO_PASS
+      }
     });
-    
+
     const resetUrl = `${process.env.FRONTEND_URL}/trocar-senha?token=${token}`;
-    
+
     await transporter.sendMail({
       from: `"Gestão de Gastos" <${process.env.ZOHO_USER}>`,
       to,
@@ -75,7 +75,7 @@ class AuthService {
             <div style="margin-top: 32px; text-align: center; color: #aaa; font-size: 0.9em;">Equipe Gestão de Gastos</div>
           </div>
         </div>
-      `,
+      `
     });
   }
 
@@ -87,7 +87,10 @@ class AuthService {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
       // Por segurança, não revelar se o e-mail existe ou não
-      return { message: 'Se o e-mail existir, enviaremos instruções para redefinir a senha.' };
+      return {
+        message:
+          'Se o e-mail existir, enviaremos instruções para redefinir a senha.'
+      };
     }
 
     // Gerar token seguro
@@ -99,13 +102,16 @@ class AuthService {
       data: {
         token,
         userId: user.id,
-        expiresAt,
+        expiresAt
       }
     });
 
     // Enviar e-mail
     await this.sendPasswordResetEmail(user.email, user.name, token);
-    return { message: 'Se o e-mail existir, enviaremos instruções para redefinir a senha.' };
+    return {
+      message:
+        'Se o e-mail existir, enviaremos instruções para redefinir a senha.'
+    };
   }
 
   async resetPassword(token, password) {
@@ -114,7 +120,9 @@ class AuthService {
     }
 
     // Buscar token no banco
-    const resetToken = await this.prisma.passwordResetToken.findUnique({ where: { token } });
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { token }
+    });
     if (!resetToken || resetToken.expiresAt < new Date()) {
       throw new Error('Token inválido ou expirado.');
     }
@@ -127,7 +135,9 @@ class AuthService {
     });
 
     // Deletar todos os tokens desse usuário
-    await this.prisma.passwordResetToken.deleteMany({ where: { userId: resetToken.userId } });
+    await this.prisma.passwordResetToken.deleteMany({
+      where: { userId: resetToken.userId }
+    });
     return { message: 'Senha alterada com sucesso.' };
   }
 
@@ -141,14 +151,14 @@ class AuthService {
     const userExists = await this.prisma.user.findUnique({
       where: { email }
     });
-    
+
     if (userExists) {
       throw new Error('Email já cadastrado.');
     }
-    
+
     const password_hash = await bcrypt.hash(password, 10);
     const trialEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 dias
-    
+
     const user = await this.prisma.user.create({
       data: {
         name,
@@ -167,20 +177,20 @@ class AuthService {
         plan: true
       }
     });
-    
+
     // Cria o cliente no Stripe
     const stripeCustomer = await stripe.customers.create({
       name,
       email,
       metadata: { user_id: user.id.toString() }
     });
-    
+
     // Atualiza o usuário com o stripe_customer_id
     await this.prisma.user.update({
       where: { id: user.id },
       data: { stripe_customer_id: stripeCustomer.id }
     });
-    
+
     // Inserir categorias padrão para o novo usuário
     const defaultCategories = [
       { name: 'Salário', type: 'income' },
@@ -204,7 +214,7 @@ class AuthService {
       })),
       skipDuplicates: true
     });
-    
+
     await this.sendWelcomeEmail(user.email, user.name);
     return user;
   }
@@ -217,17 +227,19 @@ class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email }
     });
-    
+
     if (!user) {
       throw new Error('Credenciais inválidas.');
     }
-    
+
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) {
       throw new Error('Credenciais inválidas.');
     }
-    
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '1d' });
+
+    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
+      expiresIn: '1d'
+    });
     return { token };
   }
 

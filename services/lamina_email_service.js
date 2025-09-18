@@ -2,7 +2,7 @@ const { generateLaminaHTML } = require('../utils/lamina_generator');
 const { generatePDFFromHTML } = require('../utils/pdf_generator');
 const prismaService = require('./prisma.service');
 
-const _getMonthName = month => {
+const getMonthName = month => {
   const months = [
     'Janeiro',
     'Fevereiro',
@@ -193,26 +193,42 @@ async function buscarTodosUsuarios() {
 }
 
 // Função para enviar e-mail com PDF
-async function enviarEmailComPdf(_destinatario, _pdfBuffer, _mes, _ano) {
-  // Aqui você deve usar seu serviço de e-mail já configurado
-  // Exemplo com nodemailer:
-  // const nodemailer = require('nodemailer');
-  // const transporter = nodemailer.createTransporter({
-  //   // Sua configuração de e-mail
-  // });
-  // await transporter.sendMail({
-  //   from: process.env.EMAIL_FROM || 'seu@email.com',
-  //   to: destinatario,
-  //   subject: `Relatório Financeiro - ${getMonthName(mes)}/${ano}`,
-  //   text: `Segue em anexo seu relatório financeiro de ${getMonthName(mes)}/${ano}.`,
-  //   attachments: [
-  //     {
-  //       filename: `relatorio-financeiro-${mes}-${ano}.pdf`,
-  //       content: pdfBuffer,
-  //       contentType: 'application/pdf'
-  //     }
-  //   ]
-  // });
+async function enviarEmailComPdf(destinatario, pdfBuffer, mes, ano) {
+  const nodemailer = require('nodemailer');
+
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.zoho.com',
+    port: 587,
+    secure: false,
+    auth: {
+      user: process.env.ZOHO_USER,
+      pass: process.env.ZOHO_PASS
+    }
+  });
+
+  await transporter.sendMail({
+    from: `"Gestão de Gastos" <${process.env.ZOHO_USER}>`,
+    to: destinatario,
+    subject: `Relatório Financeiro - ${getMonthName(mes)}/${ano}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Relatório Financeiro Mensal</h2>
+        <p>Olá!</p>
+        <p>Segue em anexo seu relatório financeiro de <strong>${getMonthName(mes)}/${ano}</strong>.</p>
+        <p>Este relatório contém um resumo completo das suas receitas, despesas e categorias do mês.</p>
+        <p>Obrigado por usar nossa plataforma!</p>
+        <br>
+        <p>Equipe Gestão de Gastos</p>
+      </div>
+    `,
+    attachments: [
+      {
+        filename: `relatorio-financeiro-${mes}-${ano}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }
+    ]
+  });
 }
 
 // Função para enviar relatório individual
