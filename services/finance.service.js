@@ -607,19 +607,61 @@ class FinanceService {
 
   async updateIncome(userId, incomeId, incomeData) {
     try {
+      // Primeiro, verificar se é uma receita fixa
+      const existingIncome = await this.prisma.income.findFirst({
+        where: {
+          id: parseInt(incomeId),
+          user_id: userId
+        }
+      });
+
+      if (!existingIncome) {
+        throw new Error('Renda não encontrada.');
+      }
+
+      // Preparar dados para atualização
+      const updateData = {
+        description: incomeData.description,
+        value: parseFloat(incomeData.value),
+        date: new Date(incomeData.date),
+        category_id: incomeData.category_id
+          ? parseInt(incomeData.category_id)
+          : null
+      };
+
+      // Se for uma receita fixa, incluir os campos de recorrência
+      if (existingIncome.isFixed) {
+        const parsedStartDate = this.parseDateString(incomeData.startDate);
+        const parsedEndDate = this.parseDateString(incomeData.endDate);
+
+        updateData.recurrenceType = incomeData.recurrenceType;
+
+        if (parsedStartDate) {
+          updateData.startDate = this.makeLocalDate(
+            parsedStartDate.year,
+            parsedStartDate.month,
+            parsedStartDate.day
+          );
+        }
+
+        if (parsedEndDate) {
+          updateData.endDate = this.makeLocalDate(
+            parsedEndDate.year,
+            parsedEndDate.month,
+            parsedEndDate.day
+          );
+        } else if (incomeData.endDate === null || incomeData.endDate === '') {
+          // Se endDate foi explicitamente definido como null/vazio, remover a data de fim
+          updateData.endDate = null;
+        }
+      }
+
       const income = await this.prisma.income.update({
         where: {
           id: parseInt(incomeId),
           user_id: userId
         },
-        data: {
-          description: incomeData.description,
-          value: parseFloat(incomeData.value),
-          date: new Date(incomeData.date),
-          category_id: incomeData.category_id
-            ? parseInt(incomeData.category_id)
-            : null
-        },
+        data: updateData,
         include: {
           category: { select: { name: true } }
         }
@@ -643,19 +685,61 @@ class FinanceService {
 
   async updateExpense(userId, expenseId, expenseData) {
     try {
+      // Primeiro, verificar se é uma despesa fixa
+      const existingExpense = await this.prisma.expense.findFirst({
+        where: {
+          id: parseInt(expenseId),
+          user_id: userId
+        }
+      });
+
+      if (!existingExpense) {
+        throw new Error('Despesa não encontrada.');
+      }
+
+      // Preparar dados para atualização
+      const updateData = {
+        description: expenseData.description,
+        value: parseFloat(expenseData.value),
+        date: new Date(expenseData.date),
+        category_id: expenseData.category_id
+          ? parseInt(expenseData.category_id)
+          : null
+      };
+
+      // Se for uma despesa fixa, incluir os campos de recorrência
+      if (existingExpense.isFixed) {
+        const parsedStartDate = this.parseDateString(expenseData.startDate);
+        const parsedEndDate = this.parseDateString(expenseData.endDate);
+
+        updateData.recurrenceType = expenseData.recurrenceType;
+
+        if (parsedStartDate) {
+          updateData.startDate = this.makeLocalDate(
+            parsedStartDate.year,
+            parsedStartDate.month,
+            parsedStartDate.day
+          );
+        }
+
+        if (parsedEndDate) {
+          updateData.endDate = this.makeLocalDate(
+            parsedEndDate.year,
+            parsedEndDate.month,
+            parsedEndDate.day
+          );
+        } else if (expenseData.endDate === null || expenseData.endDate === '') {
+          // Se endDate foi explicitamente definido como null/vazio, remover a data de fim
+          updateData.endDate = null;
+        }
+      }
+
       const expense = await this.prisma.expense.update({
         where: {
           id: parseInt(expenseId),
           user_id: userId
         },
-        data: {
-          description: expenseData.description,
-          value: parseFloat(expenseData.value),
-          date: new Date(expenseData.date),
-          category_id: expenseData.category_id
-            ? parseInt(expenseData.category_id)
-            : null
-        },
+        data: updateData,
         include: {
           category: { select: { name: true } }
         }
