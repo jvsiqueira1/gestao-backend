@@ -13,10 +13,32 @@ router.post(
     try {
       // Buscar stripe_customer_id do usuário
       const prisma = prismaService.getClient();
-      const _user = await prisma.user.findUnique({
+      const user = await prisma.user.findUnique({
         where: { id: req.user.id }
       });
-      // const customerId = user?.stripe_customer_id || null; // Não usar mais
+
+      if (!user) {
+        return res.status(404).json({ error: 'Usuário não encontrado' });
+      }
+
+      // Se não tem stripe_customer_id, criar um
+      let customerId = user.stripe_customer_id;
+
+      if (!customerId) {
+        const stripeCustomer = await stripe.customers.create({
+          name: user.name,
+          email: user.email,
+          metadata: { user_id: user.id.toString() }
+        });
+
+        customerId = stripeCustomer.id;
+
+        // Atualizar o usuário com o novo stripe_customer_id
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { stripe_customer_id: customerId }
+        });
+      }
 
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ['card'],
@@ -39,9 +61,9 @@ router.post(
         ],
         mode: 'subscription',
         allow_promotion_codes: true,
+        customer: customerId, // ✅ USAR O CUSTOMER EXISTENTE
         success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/perfil?success=true`,
         cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/perfil?canceled=true`,
-        customer_email: req.user.email,
         metadata: {
           user_id: req.user.id.toString()
         }
@@ -65,6 +87,35 @@ router.post(
   async (req, res) => {
     const { success_url, cancel_url } = req.body;
     try {
+      // Buscar stripe_customer_id do usuário
+      const prisma = prismaService.getClient();
+      const user = await prisma.user.findUnique({
+        where: { id: req.user.id }
+      });
+
+      if (!user) {
+        return res.status(404).json({ error: 'Usuário não encontrado' });
+      }
+
+      // Se não tem stripe_customer_id, criar um
+      let customerId = user.stripe_customer_id;
+
+      if (!customerId) {
+        const stripeCustomer = await stripe.customers.create({
+          name: user.name,
+          email: user.email,
+          metadata: { user_id: user.id.toString() }
+        });
+
+        customerId = stripeCustomer.id;
+
+        // Atualizar o usuário com o novo stripe_customer_id
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { stripe_customer_id: customerId }
+        });
+      }
+
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ['card'],
         mode: 'payment',
@@ -81,9 +132,14 @@ router.post(
             quantity: 1
           }
         ],
-        customer_email: req.user.email,
-        success_url,
-        cancel_url,
+        allow_promotion_codes: true,
+        customer: customerId, // ✅ USAR O CUSTOMER EXISTENTE
+        success_url:
+          success_url ||
+          `${process.env.FRONTEND_URL || 'http://localhost:3000'}/pagamento/sucesso`,
+        cancel_url:
+          cancel_url ||
+          `${process.env.FRONTEND_URL || 'http://localhost:3000'}/pagamento/cancelado`,
         metadata: {
           user_id: req.user.id.toString()
         }

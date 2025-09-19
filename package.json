@@ -15,7 +15,9 @@
     "lint:fix": "eslint . --ext .js --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint:format": "npm run lint:fix && npm run format"
+    "lint:format": "npm run lint:fix && npm run format",
+    "test:customer": "node scripts/test-customer-creation.js",
+    "create:coupon": "node scripts/create-user-specific-coupon.js"
   },
   "keywords": [],
   "author": "",
