@@ -1,27 +1,23 @@
 {
-  "name": "Gestão de Gasto Backend",
-  "version": "1.0.0",
-  "description": "",
+  "name": "gestao-de-gastos-backend",
+  "version": "2.0.0",
+  "description": "Backend single-user para gestão financeira pessoal",
   "main": "index.js",
   "scripts": {
     "dev": "nodemon index.js",
+    "start": "prisma generate && node index.js",
     "build": "prisma generate && node --check index.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "node prisma/seed.js",
-    "start": "prisma generate && node index.js",
+    "db:seed": "node scripts/seed.js",
+    "db:dump": "node scripts/dump.js",
+    "db:restore": "node scripts/restore.js",
     "lint": "eslint . --ext .js",
     "lint:fix": "eslint . --ext .js --fix",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "lint:format": "npm run lint:fix && npm run format",
-    "test:customer": "node scripts/test-customer-creation.js",
-    "create:coupon": "node scripts/create-user-specific-coupon.js"
+    "format": "prettier --write ."
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "type": "commonjs",
   "dependencies": {
     "@prisma/client": "^6.11.1",
@@ -30,16 +26,12 @@
     "dotenv": "^17.0.1",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
-    "lru-cache": "^11.1.0",
-    "node-cron": "^4.2.1",
-    "nodemailer": "^7.0.5",
-    "puppeteer": "^24.12.1",
-    "stripe": "^18.3.0"
+    "lru-cache": "^11.1.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.10",
-    "prisma": "^6.11.1",
     "eslint": "^8.57.0",
-    "prettier": "^3.2.5"
+    "nodemon": "^3.1.10",
+    "prettier": "^3.2.5",
+    "prisma": "^6.11.1"
   }
 }

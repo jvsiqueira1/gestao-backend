@@ -22,8 +22,10 @@ class AuthController {
       res.status(200).json(result);
     } catch (error) {
       console.error('Erro ao trocar senha:', error);
-      if (error.message === 'Token e nova senha são obrigatórios.' || 
-          error.message === 'Token inválido ou expirado.') {
+      if (
+        error.message === 'Token e nova senha são obrigatórios.' ||
+        error.message === 'Token inválido ou expirado.'
+      ) {
         return res.status(400).json({ error: error.message });
       }
       res.status(500).json({ error: 'Erro ao trocar senha.' });
@@ -37,8 +39,11 @@ class AuthController {
       res.status(201).json(user);
     } catch (error) {
       console.error('Erro ao registrar usuário:', error);
-      if (error.message === 'Nome, email e senha são obrigatórios.' || 
-          error.message === 'Email já cadastrado.') {
+      if (error.code === 'FORBIDDEN') return res.status(403).json({ error: error.message });
+      if (
+        error.message === 'Nome, email e senha são obrigatórios.' ||
+        error.message === 'Email já cadastrado.'
+      ) {
         return res.status(400).json({ error: error.message });
       }
       res.status(500).json({ error: 'Erro ao registrar usuário.' });
@@ -52,8 +57,11 @@ class AuthController {
       res.json(result);
     } catch (error) {
       console.error('Erro ao fazer login:', error);
-      if (error.message === 'Email e senha são obrigatórios.' || 
-          error.message === 'Credenciais inválidas.') {
+      if (error.code === 'FORBIDDEN') return res.status(403).json({ error: error.message });
+      if (
+        error.message === 'Email e senha são obrigatórios.' ||
+        error.message === 'Credenciais inválidas.'
+      ) {
         return res.status(401).json({ error: error.message });
       }
       res.status(500).json({ error: 'Erro ao fazer login.' });

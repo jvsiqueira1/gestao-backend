@@ -328,9 +328,7 @@ function formatUser(user) {
     createdAt: user.created_at ? new Date(user.created_at) : null,
     createdAtFormatted: formatDateTime(user.created_at),
     updatedAt: user.updated_at ? new Date(user.updated_at) : null,
-    updatedAtFormatted: formatDateTime(user.updated_at),
-    premiumUntil: user.premium_until ? new Date(user.premium_until) : null,
-    premiumUntilFormatted: formatDate(user.premium_until)
+    updatedAtFormatted: formatDateTime(user.updated_at)
   };
 }
 

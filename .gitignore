@@ -3,3 +3,7 @@ node_modules
 .env
 
 /generated/prisma
+
+# Local DB dumps
+dumps/
+*.dump.json
