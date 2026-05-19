@@ -19,6 +19,9 @@
     "format": "prettier --write ."
   },
   "type": "commonjs",
+  "prisma": {
+    "seed": "node scripts/seed.js"
+  },
   "dependencies": {
     "@prisma/client": "^6.11.1",
     "bcryptjs": "^3.0.2",
