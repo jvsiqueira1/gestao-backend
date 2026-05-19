@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { PrismaClient } = require('@prisma/client');
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 async function main() {
   const prisma = new PrismaClient();
@@ -24,12 +24,24 @@ async function main() {
   }
   const userIds = users.map((u) => u.id);
 
-  const [categories, incomes, expenses, financialGoals, passwordResetTokens] = await Promise.all([
+  const [
+    categories,
+    incomes,
+    expenses,
+    financialGoals,
+    passwordResetTokens,
+    investments,
+    investmentTransactions,
+    valuations
+  ] = await Promise.all([
     prisma.category.findMany({ where: { user_id: { in: userIds } } }),
     prisma.income.findMany({ where: { user_id: { in: userIds } } }),
     prisma.expense.findMany({ where: { user_id: { in: userIds } } }),
     prisma.financialGoal.findMany({ where: { user_id: { in: userIds } } }),
-    prisma.passwordResetToken.findMany({ where: { userId: { in: userIds } } })
+    prisma.passwordResetToken.findMany({ where: { userId: { in: userIds } } }),
+    prisma.investment.findMany({ where: { user_id: { in: userIds } } }).catch(() => []),
+    prisma.investmentTransaction.findMany({ where: { user_id: { in: userIds } } }).catch(() => []),
+    prisma.valuation.findMany({ where: { user_id: { in: userIds } } }).catch(() => [])
   ]);
 
   const payload = {
@@ -43,7 +55,10 @@ async function main() {
         incomes: incomes.length,
         expenses: expenses.length,
         financialGoals: financialGoals.length,
-        passwordResetTokens: passwordResetTokens.length
+        passwordResetTokens: passwordResetTokens.length,
+        investments: investments.length,
+        investmentTransactions: investmentTransactions.length,
+        valuations: valuations.length
       }
     },
     users,
@@ -51,7 +66,10 @@ async function main() {
     incomes,
     expenses,
     financialGoals,
-    passwordResetTokens
+    passwordResetTokens,
+    investments,
+    investmentTransactions,
+    valuations
   };
 
   const dumpsDir = path.join(__dirname, '..', 'dumps');

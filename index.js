@@ -43,6 +43,9 @@ app.use('/api/fixed-expenses', fixedExpensesRoutes);
 const fixedIncomesRoutes = require('./routes/fixed-incomes');
 app.use('/api/fixed-incomes', fixedIncomesRoutes);
 
+const investmentsRoutes = require('./routes/investments');
+app.use('/api/investments', investmentsRoutes);
+
 app.get('/', (req, res) => {
   res.send('API de Gestão de Gastos Pessoais rodando!');
 });

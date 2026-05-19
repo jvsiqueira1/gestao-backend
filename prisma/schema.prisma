@@ -8,17 +8,20 @@ datasource db {
 }
 
 model User {
-  id                  Int                  @id @default(autoincrement())
-  name                String
-  email               String               @unique
-  password            String?
-  created_at          DateTime             @default(now())
-  updated_at          DateTime?            @updatedAt
-  categories          Category[]
-  expenses            Expense[]
-  incomes             Income[]
-  financialGoals      FinancialGoal[]
-  passwordResetTokens PasswordResetToken[]
+  id                     Int                     @id @default(autoincrement())
+  name                   String
+  email                  String                  @unique
+  password               String?
+  created_at             DateTime                @default(now())
+  updated_at             DateTime?               @updatedAt
+  categories             Category[]
+  expenses               Expense[]
+  incomes                Income[]
+  financialGoals         FinancialGoal[]
+  passwordResetTokens    PasswordResetToken[]
+  investments            Investment[]
+  investmentTransactions InvestmentTransaction[]
+  valuations             Valuation[]
 
   @@map("users")
 }
@@ -102,4 +105,59 @@ model PasswordResetToken {
   createdAt DateTime @default(now())
 
   @@map("password_reset_token")
+}
+
+model Investment {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  name       String
+  ticker     String?
+  type       String
+  broker     String?
+  notes      String?
+  archived   Boolean  @default(false)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user         User                    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  transactions InvestmentTransaction[]
+  valuations   Valuation[]
+
+  @@index([user_id, archived])
+  @@map("investment")
+}
+
+model InvestmentTransaction {
+  id            Int      @id @default(autoincrement())
+  investment_id Int
+  user_id       Int
+  type          String
+  value         Float
+  quantity      Float?
+  date          DateTime
+  notes         String?
+  created_at    DateTime @default(now())
+
+  investment Investment @relation(fields: [investment_id], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, date])
+  @@index([investment_id, date])
+  @@map("investment_transaction")
+}
+
+model Valuation {
+  id            Int      @id @default(autoincrement())
+  investment_id Int
+  user_id       Int
+  value         Float
+  date          DateTime
+  created_at    DateTime @default(now())
+
+  investment Investment @relation(fields: [investment_id], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, date])
+  @@index([investment_id, date])
+  @@map("valuation")
 }

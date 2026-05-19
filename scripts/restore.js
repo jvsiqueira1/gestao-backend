@@ -138,6 +138,82 @@ async function main() {
   }
   console.log(`Metas: ${payload.financialGoals?.length || 0}`);
 
+  for (const inv of payload.investments || []) {
+    await prisma.investment.upsert({
+      where: { id: inv.id },
+      update: {
+        name: inv.name,
+        ticker: inv.ticker ?? null,
+        type: inv.type,
+        broker: inv.broker ?? null,
+        notes: inv.notes ?? null,
+        archived: !!inv.archived,
+        user_id: inv.user_id
+      },
+      create: {
+        id: inv.id,
+        name: inv.name,
+        ticker: inv.ticker ?? null,
+        type: inv.type,
+        broker: inv.broker ?? null,
+        notes: inv.notes ?? null,
+        archived: !!inv.archived,
+        user_id: inv.user_id,
+        created_at: dateify(inv.created_at),
+        updated_at: dateify(inv.updated_at)
+      }
+    });
+  }
+  console.log(`Investimentos: ${payload.investments?.length || 0}`);
+
+  for (const t of payload.investmentTransactions || []) {
+    await prisma.investmentTransaction.upsert({
+      where: { id: t.id },
+      update: {
+        investment_id: t.investment_id,
+        user_id: t.user_id,
+        type: t.type,
+        value: t.value,
+        quantity: t.quantity ?? null,
+        date: new Date(t.date),
+        notes: t.notes ?? null
+      },
+      create: {
+        id: t.id,
+        investment_id: t.investment_id,
+        user_id: t.user_id,
+        type: t.type,
+        value: t.value,
+        quantity: t.quantity ?? null,
+        date: new Date(t.date),
+        notes: t.notes ?? null,
+        created_at: dateify(t.created_at)
+      }
+    });
+  }
+  console.log(`Lançamentos investimentos: ${payload.investmentTransactions?.length || 0}`);
+
+  for (const v of payload.valuations || []) {
+    await prisma.valuation.upsert({
+      where: { id: v.id },
+      update: {
+        investment_id: v.investment_id,
+        user_id: v.user_id,
+        value: v.value,
+        date: new Date(v.date)
+      },
+      create: {
+        id: v.id,
+        investment_id: v.investment_id,
+        user_id: v.user_id,
+        value: v.value,
+        date: new Date(v.date),
+        created_at: dateify(v.created_at)
+      }
+    });
+  }
+  console.log(`Valuations: ${payload.valuations?.length || 0}`);
+
   console.log('Restore concluído.');
   await prisma.$disconnect();
 }

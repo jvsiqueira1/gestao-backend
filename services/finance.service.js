@@ -1,5 +1,6 @@
 const prismaService = require('./prisma.service');
 const { LRUCache } = require('lru-cache');
+const investmentService = require('./investment.service');
 
 class FinanceService {
   constructor() {
@@ -432,6 +433,13 @@ class FinanceService {
       const monthlyIncome = incomeResult._sum.value || 0;
       const monthlyExpense = expenseResult._sum.value || 0;
 
+      let investmentSummary = null;
+      try {
+        investmentSummary = await investmentService.getSummary(userId, currentMonth, currentYear);
+      } catch (err) {
+        console.error('Erro ao buscar resumo de investimentos:', err);
+      }
+
       const responseData = {
         monthlyIncome: Number(monthlyIncome),
         monthlyExpense: Number(monthlyExpense),
@@ -442,7 +450,8 @@ class FinanceService {
         userCreatedYear: user.created_at.getFullYear(),
         userCreatedMonth: user.created_at.getMonth() + 1,
         currentMonth: parseInt(currentMonth),
-        currentYear: parseInt(currentYear)
+        currentYear: parseInt(currentYear),
+        investments: investmentSummary
       };
 
       this.dashboardCache.set(cacheKey, responseData);
