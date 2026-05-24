@@ -530,7 +530,7 @@ class FinanceService {
         }
       });
 
-      this.incomeCache.clear();
+      this.clearUserCache(userId);
       return income;
     } catch (error) {
       console.error('Erro ao criar receita:', error);
@@ -606,7 +606,7 @@ class FinanceService {
         }
       });
 
-      this.expenseCache.clear();
+      this.clearUserCache(userId);
       return expense;
     } catch (error) {
       console.error('Erro ao criar despesa:', error);
@@ -681,7 +681,7 @@ class FinanceService {
         category_name: income.category?.name || null
       };
 
-      this.incomeCache.clear();
+      this.clearUserCache(userId);
       return formattedIncome;
     } catch (error) {
       if (error.code === 'P2025') {
@@ -759,7 +759,7 @@ class FinanceService {
         category_name: expense.category?.name || null
       };
 
-      this.expenseCache.clear();
+      this.clearUserCache(userId);
       return formattedExpense;
     } catch (error) {
       if (error.code === 'P2025') {
@@ -779,7 +779,7 @@ class FinanceService {
         }
       });
 
-      this.incomeCache.clear();
+      this.clearUserCache(userId);
       return { success: true };
     } catch (error) {
       if (error.code === 'P2025') {
@@ -799,7 +799,7 @@ class FinanceService {
         }
       });
 
-      this.expenseCache.clear();
+      this.clearUserCache(userId);
       return { success: true };
     } catch (error) {
       if (error.code === 'P2025') {

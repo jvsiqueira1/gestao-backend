@@ -25,6 +25,16 @@ class InvestmentService {
     for (const key of this.cache.keys()) {
       if (key.includes(`u:${userId}`)) this.cache.delete(key);
     }
+    // Dashboard agrega o resumo de investimentos; precisa ser invalidado também.
+    // Lazy require para evitar ciclo (finance.service também pode referenciar este).
+    try {
+      const financeService = require('./finance.service');
+      if (typeof financeService.clearUserCache === 'function') {
+        financeService.clearUserCache(userId);
+      }
+    } catch (err) {
+      console.error('Falha ao invalidar dashboard cache do finance:', err);
+    }
   }
 
   validateType(type) {
