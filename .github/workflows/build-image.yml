@@ -59,10 +59,32 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trigger Coolify redeploy
-        if: ${{ vars.COOLIFY_WEBHOOK_URL != '' }}
         env:
           COOLIFY_WEBHOOK_URL: ${{ vars.COOLIFY_WEBHOOK_URL }}
           COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
         run: |
-          curl -fsSL -X GET "$COOLIFY_WEBHOOK_URL" \
-            -H "Authorization: Bearer $COOLIFY_TOKEN"
+          if [ -z "$COOLIFY_WEBHOOK_URL" ]; then
+            echo "::warning::COOLIFY_WEBHOOK_URL is empty. Configure it under Settings → Secrets and variables → Actions → Variables (Repository variables)."
+            exit 0
+          fi
+          if [ -z "$COOLIFY_TOKEN" ]; then
+            echo "::warning::COOLIFY_TOKEN is empty. Configure it under Settings → Secrets and variables → Actions → Secrets (Repository secrets)."
+          fi
+
+          # Mask the URL (it may contain a uuid query string) so it does not leak in logs
+          echo "::add-mask::$COOLIFY_WEBHOOK_URL"
+
+          echo "Calling Coolify deploy webhook..."
+          http_code=$(curl -sS -o /tmp/coolify-response.txt -w "%{http_code}" \
+            -X GET "$COOLIFY_WEBHOOK_URL" \
+            -H "Authorization: Bearer $COOLIFY_TOKEN")
+
+          echo "HTTP status: $http_code"
+          echo "Response body:"
+          cat /tmp/coolify-response.txt
+          echo
+
+          if [ "$http_code" -ge 400 ]; then
+            echo "::error::Coolify webhook returned HTTP $http_code"
+            exit 1
+          fi
