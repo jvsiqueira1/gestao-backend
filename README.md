@@ -70,7 +70,18 @@ Após o push da imagem, um step opcional dispara o webhook de deploy do Coolify 
 2. Porta `4000`, healthcheck `/health`.
 3. Configure todas as env vars listadas acima.
 4. Adicione um domínio (`api.<seudominio>`) — Coolify provê SSL via Let's Encrypt.
-5. `prisma migrate deploy` roda automaticamente no boot do container (definido no `Dockerfile`).
+
+### Aplicando migrations
+
+O container **não** roda `prisma migrate deploy` no boot. A VPS não tem conectividade estável com o endpoint direto do Neon, e o pooler não suporta o advisory lock que o `migrate` usa. Antes de cada deploy que envolva mudanças de schema:
+
+```bash
+cd backend
+DATABASE_URL="postgresql://...@ep-xxx.region.aws.neon.tech/db?sslmode=require" \
+  npx prisma migrate deploy
+```
+
+Use a URL **direct** (sem `-pooler`) para o migrate. Em seguida, faça o push para `main` para disparar o build/deploy normal.
 
 ## Integração com o Frontend
 O frontend consome os endpoints REST do backend via `VITE_API_URL` / `NEXT_PUBLIC_API_URL`. CORS é restrito a `FRONTEND_URL` e `http://localhost:3000`.
