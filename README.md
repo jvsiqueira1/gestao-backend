@@ -1,69 +1,80 @@
 # Gestão de Gastos Pessoais – Backend
 
-Este é o backend do sistema de gestão de gastos pessoais, desenvolvido em Node.js com Express, Prisma ORM e integração com Stripe para assinaturas.
+Backend single-user para gestão financeira pessoal, em Node.js + Express + Prisma ORM, com Postgres (Neon) como banco.
 
 ## Funcionalidades
-- API REST para cadastro, login e autenticação de usuários
-- Gestão de categorias, receitas, despesas e metas financeiras
-- Controle de assinatura mensal via Stripe (criação, cancelamento, reativação)
-- Webhook para atualização automática do status da assinatura
-- Proteção de rotas por autenticação e status de assinatura
+- API REST para autenticação (JWT) com lock de owner único
+- Categorias, receitas, despesas (avulsas e fixas) e metas financeiras
+- Investimentos com transações e valuations
+- Proteção de rotas via middleware de autenticação
 
 ## Pré-requisitos
-- Node.js 18+
-- NPM, Yarn, PNPM ou Bun
-- Banco de dados PostgreSQL (ou SQLite para testes)
-- Conta Stripe (modo teste)
+- Node.js 20+
+- NPM
+- Banco PostgreSQL (Neon recomendado)
 
 ## Instalação
 ```bash
 cd backend
-npm install # ou yarn, pnpm, bun
+npm install
 ```
 
 ## Variáveis de Ambiente
-Crie um arquivo `.env` na pasta `backend` com:
+Veja `.env.exemple`. Mínimo:
 ```
+DATABASE_URL=<neon pooled>
+DIRECT_URL=<neon direct>     # usado apenas por prisma migrate
+JWT_SECRET=<segredo forte>
+FRONTEND_URL=http://localhost:3000
 PORT=4000
-DATABASE_URL=postgresql://usuario:senha@localhost:5432/nome_do_banco
-JWT_SECRET=sua_chave_jwt
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_...
+OWNER_EMAIL=...
+OWNER_PASSWORD=...
+OWNER_NAME=...
 ```
 
-## Rodando o Projeto
+## Rodando localmente
 ```bash
-npm run dev # ou npm start
+npm run dev
 ```
-A API estará disponível em [http://localhost:4000/api](http://localhost:4000/api)
+API em [http://localhost:4000](http://localhost:4000). Healthcheck: `GET /health`.
 
 ## Estrutura de Pastas
-- `routes/` – Rotas da API (auth, stripe, finance, category, etc)
-- `middleware/` – Middlewares de autenticação e autorização
-- `prisma/` – Migrations e schema do banco
-- `lib/` – Instância do Prisma
-- `utils/` – Utilitários e dados padrão
-
-## Integração com Stripe
-- Endpoint `/api/stripe/create-checkout-session` cria sessões de assinatura
-- Webhook `/api/stripe/webhook` processa eventos do Stripe e atualiza o status do usuário
-- O secret do webhook deve ser igual ao do Stripe CLI ou painel
+- `routes/` – rotas da API (auth, finance, category, goal, fixed-expenses, fixed-incomes, investments)
+- `middleware/` – autenticação JWT
+- `prisma/` – schema e migrations
+- `lib/` – instância do Prisma client
+- `scripts/` – seed, dump e restore do banco
+- `utils/` – utilitários
 
 ## Comandos Principais
-- `npm run dev` – inicia o servidor em modo desenvolvimento
-- `npm start` – inicia o servidor em produção
-- `npx prisma migrate dev` – aplica migrations do banco
-- `npx prisma studio` – interface visual para o banco
+- `npm run dev` – modo desenvolvimento (nodemon)
+- `npm start` – produção (`prisma generate && node index.js`)
+- `npx prisma migrate dev` – aplica migrations localmente
+- `npx prisma migrate deploy` – aplica migrations em produção
+- `npx prisma studio` – UI do banco
 
-## Testando o Stripe localmente
-- Use o Stripe CLI: `stripe listen --forward-to localhost:4000/api/stripe/webhook`
-- Use cartões de teste: [Stripe Docs](https://stripe.com/docs/testing)
+## CI/CD
+
+O workflow [`.github/workflows/build-image.yml`](.github/workflows/build-image.yml) builda a imagem Docker no GitHub Actions e publica em `ghcr.io/jvsiqueira1/gestao-backend` a cada push em `main` e em tags `v*.*.*`.
+
+Tags geradas:
+- `latest` – aponta para o último build de `main`
+- `main`, `sha-<commit>` – sempre presentes
+- `vX.Y.Z`, `X.Y` – quando uma tag SemVer é publicada
+
+Após o push da imagem, um step opcional dispara o webhook de deploy do Coolify (variáveis `COOLIFY_WEBHOOK_URL` + secret `COOLIFY_TOKEN`), que puxa a imagem no VPS e reinicia o container.
+
+## Deploy (Coolify)
+
+1. **New Resource → Docker Image** apontando para `ghcr.io/jvsiqueira1/gestao-backend:latest`.
+2. Porta `4000`, healthcheck `/health`.
+3. Configure todas as env vars listadas acima.
+4. Adicione um domínio (`api.<seudominio>`) — Coolify provê SSL via Let's Encrypt.
+5. `prisma migrate deploy` roda automaticamente no boot do container (definido no `Dockerfile`).
 
 ## Integração com o Frontend
-- O frontend consome os endpoints REST do backend
-- O status da assinatura é atualizado automaticamente via webhook
-- Usuários com assinatura cancelada/paga pendente só acessam a página de perfil
+O frontend consome os endpoints REST do backend via `VITE_API_URL` / `NEXT_PUBLIC_API_URL`. CORS é restrito a `FRONTEND_URL` e `http://localhost:3000`.
 
 ---
 
-> Dúvidas ou sugestões? Abra uma issue ou entre em contato! 
+> Dúvidas ou sugestões? Abra uma issue.
