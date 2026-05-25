@@ -50,6 +50,10 @@ app.get('/', (req, res) => {
   res.send('API de Gestão de Gastos Pessoais rodando!');
 });
 
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', uptime: process.uptime() });
+});
+
 const PORT = process.env.PORT || 4000;
 
 app.listen(PORT, () => {
