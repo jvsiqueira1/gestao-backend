@@ -21,7 +21,15 @@ COPY --from=deps /app/prisma ./prisma
 # Copy application source
 COPY . .
 
+RUN chmod +x scripts/start.sh
+
 EXPOSE 4000
 
-# Apply pending migrations then start the API
-CMD ["sh", "-c", "npx prisma migrate deploy && node index.js"]
+# Container-level healthcheck so Coolify / Docker can verify the API
+# is responsive. Alpine ships busybox wget, which is enough for HTTP.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- http://localhost:4000/health || exit 1
+
+# start.sh applies pending migrations (with retry for cold Neon computes)
+# and then execs the API process.
+CMD ["sh", "scripts/start.sh"]

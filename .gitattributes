@@ -1,0 +1,4 @@
+# Always check shell scripts out with LF endings, even on Windows.
+# CRLF in start.sh would break /bin/sh inside the Linux container.
+*.sh text eol=lf
+scripts/start.sh text eol=lf
