@@ -66,9 +66,15 @@ class AuthService {
       select: { id: true, name: true, email: true }
     });
 
-    await this.prisma.category.createMany({
-      data: defaultCategories.map((c) => ({ ...c, user_id: user.id })),
-      skipDuplicates: true
+    // RLS exige app.current_user_id setado para inserir em category.
+    // Como registerUser roda pré-autenticação (sem rls_middleware), wrappa
+    // o createMany numa $transaction com SET LOCAL do user recém-criado.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL app.current_user_id = ${user.id}`);
+      await tx.category.createMany({
+        data: defaultCategories.map((c) => ({ ...c, user_id: user.id })),
+        skipDuplicates: true
+      });
     });
 
     return user;

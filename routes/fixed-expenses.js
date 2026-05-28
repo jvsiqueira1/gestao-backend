@@ -1,17 +1,16 @@
 const express = require('express');
-const prismaService = require('../services/prisma.service');
-const authMiddleware = require('../middleware/auth_middleware');
+const { requireAuthWithRls } = require('../middleware/auth_middleware');
 
 const router = express.Router();
 
-// Middleware de autenticação
-router.use(authMiddleware);
+// Auth + RLS por request
+router.use(requireAuthWithRls);
 
 // GET - Listar todas as despesas fixas do usuário
 router.get('/', async (req, res) => {
   try {
     const userId = req.user.id;
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
 
     const fixedExpenses = await prisma.expense.findMany({
       where: {
@@ -39,7 +38,7 @@ router.get('/:id', async (req, res) => {
   try {
     const userId = req.user.id;
     const expenseId = parseInt(req.params.id);
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
 
     const fixedExpense = await prisma.expense.findFirst({
       where: {
@@ -68,7 +67,7 @@ router.get('/:id/history', async (req, res) => {
   try {
     const userId = req.user.id;
     const expenseId = parseInt(req.params.id);
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
 
     // Verificar se a despesa fixa existe e pertence ao usuário
     const fixedExpense = await prisma.expense.findFirst({
@@ -155,7 +154,7 @@ router.post('/', async (req, res) => {
     }
 
     // Criar a despesa fixa
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
     const fixedExpense = await prisma.expense.create({
       data: {
         description,
@@ -195,7 +194,7 @@ router.put('/:id', async (req, res) => {
     } = req.body;
 
     // Verificar se a despesa fixa existe e pertence ao usuário
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
     const existingExpense = await prisma.expense.findFirst({
       where: {
         id: expenseId,
@@ -236,7 +235,7 @@ router.delete('/:id', async (req, res) => {
   try {
     const userId = req.user.id;
     const expenseId = parseInt(req.params.id);
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
 
     // Verificar se a despesa fixa existe e pertence ao usuário
     const existingExpense = await prisma.expense.findFirst({

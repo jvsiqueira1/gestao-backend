@@ -49,12 +49,12 @@ class InvestmentService {
     }
   }
 
-  async listInvestments(userId) {
+  async listInvestments(userId, prisma = this.prisma) {
     const cacheKey = `list:u:${userId}`;
     const cached = this.cache.get(cacheKey);
     if (cached) return cached;
 
-    const investments = await this.prisma.investment.findMany({
+    const investments = await prisma.investment.findMany({
       where: { user_id: userId },
       orderBy: [{ archived: 'asc' }, { created_at: 'desc' }],
       include: {
@@ -106,8 +106,8 @@ class InvestmentService {
     return enriched;
   }
 
-  async getInvestment(userId, id) {
-    const inv = await this.prisma.investment.findFirst({
+  async getInvestment(userId, id, prisma = this.prisma) {
+    const inv = await prisma.investment.findFirst({
       where: { id: parseInt(id), user_id: userId },
       include: {
         transactions: { orderBy: { date: 'desc' } },
@@ -120,13 +120,13 @@ class InvestmentService {
     return inv;
   }
 
-  async createInvestment(userId, data) {
+  async createInvestment(userId, data, prisma = this.prisma) {
     const { name, ticker, type, broker, notes } = data;
     if (!name || !type) {
       throw Object.assign(new Error('Nome e tipo são obrigatórios.'), { status: 400 });
     }
     this.validateType(type);
-    const inv = await this.prisma.investment.create({
+    const inv = await prisma.investment.create({
       data: {
         user_id: userId,
         name,
@@ -140,15 +140,15 @@ class InvestmentService {
     return inv;
   }
 
-  async updateInvestment(userId, id, data) {
-    const existing = await this.prisma.investment.findFirst({
+  async updateInvestment(userId, id, data, prisma = this.prisma) {
+    const existing = await prisma.investment.findFirst({
       where: { id: parseInt(id), user_id: userId }
     });
     if (!existing) {
       throw Object.assign(new Error('Investimento não encontrado.'), { status: 404 });
     }
     if (data.type) this.validateType(data.type);
-    const inv = await this.prisma.investment.update({
+    const inv = await prisma.investment.update({
       where: { id: parseInt(id) },
       data: {
         name: data.name ?? existing.name,
@@ -163,20 +163,20 @@ class InvestmentService {
     return inv;
   }
 
-  async deleteInvestment(userId, id) {
-    const existing = await this.prisma.investment.findFirst({
+  async deleteInvestment(userId, id, prisma = this.prisma) {
+    const existing = await prisma.investment.findFirst({
       where: { id: parseInt(id), user_id: userId }
     });
     if (!existing) {
       throw Object.assign(new Error('Investimento não encontrado.'), { status: 404 });
     }
-    await this.prisma.investment.delete({ where: { id: parseInt(id) } });
+    await prisma.investment.delete({ where: { id: parseInt(id) } });
     this.invalidate(userId);
     return { success: true };
   }
 
-  async addTransaction(userId, investmentId, data) {
-    const inv = await this.prisma.investment.findFirst({
+  async addTransaction(userId, investmentId, data, prisma = this.prisma) {
+    const inv = await prisma.investment.findFirst({
       where: { id: parseInt(investmentId), user_id: userId }
     });
     if (!inv) {
@@ -188,7 +188,7 @@ class InvestmentService {
     if (isNaN(value) || value <= 0) {
       throw Object.assign(new Error('Valor inválido.'), { status: 400 });
     }
-    const tx = await this.prisma.investmentTransaction.create({
+    const tx = await prisma.investmentTransaction.create({
       data: {
         investment_id: inv.id,
         user_id: userId,
@@ -203,20 +203,20 @@ class InvestmentService {
     return tx;
   }
 
-  async deleteTransaction(userId, txId) {
-    const tx = await this.prisma.investmentTransaction.findFirst({
+  async deleteTransaction(userId, txId, prisma = this.prisma) {
+    const tx = await prisma.investmentTransaction.findFirst({
       where: { id: parseInt(txId), user_id: userId }
     });
     if (!tx) {
       throw Object.assign(new Error('Lançamento não encontrado.'), { status: 404 });
     }
-    await this.prisma.investmentTransaction.delete({ where: { id: tx.id } });
+    await prisma.investmentTransaction.delete({ where: { id: tx.id } });
     this.invalidate(userId);
     return { success: true };
   }
 
-  async addValuation(userId, investmentId, data) {
-    const inv = await this.prisma.investment.findFirst({
+  async addValuation(userId, investmentId, data, prisma = this.prisma) {
+    const inv = await prisma.investment.findFirst({
       where: { id: parseInt(investmentId), user_id: userId }
     });
     if (!inv) {
@@ -227,33 +227,33 @@ class InvestmentService {
       throw Object.assign(new Error('Valor inválido.'), { status: 400 });
     }
     const date = this.parseDate(data.date) || new Date();
-    const v = await this.prisma.valuation.create({
+    const v = await prisma.valuation.create({
       data: { investment_id: inv.id, user_id: userId, value, date }
     });
     this.invalidate(userId);
     return v;
   }
 
-  async listAllTransactions(userId, { month, year } = {}) {
+  async listAllTransactions(userId, { month, year } = {}, prisma = this.prisma) {
     const where = { user_id: userId };
     if (month && year) {
       const startDate = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, 1));
       const endDate = new Date(Date.UTC(parseInt(year), parseInt(month), 1));
       where.date = { gte: startDate, lt: endDate };
     }
-    return this.prisma.investmentTransaction.findMany({
+    return prisma.investmentTransaction.findMany({
       where,
       orderBy: { date: 'desc' },
       include: { investment: { select: { name: true, ticker: true, type: true } } }
     });
   }
 
-  async getSummary(userId, month, year) {
+  async getSummary(userId, month, year, prisma = this.prisma) {
     const cacheKey = `summary:u:${userId}:${month || ''}:${year || ''}`;
     const cached = this.cache.get(cacheKey);
     if (cached) return cached;
 
-    const investments = await this.listInvestments(userId);
+    const investments = await this.listInvestments(userId, prisma);
     const active = investments.filter((i) => !i.archived);
 
     const totalPatrimony = active.reduce((s, i) => s + (i.current_value || 0), 0);
@@ -267,7 +267,7 @@ class InvestmentService {
     const monthStart = new Date(Date.UTC(currentYear, currentMonth - 1, 1));
     const monthEnd = new Date(Date.UTC(currentYear, currentMonth, 1));
 
-    const monthTx = await this.prisma.investmentTransaction.findMany({
+    const monthTx = await prisma.investmentTransaction.findMany({
       where: { user_id: userId, date: { gte: monthStart, lt: monthEnd } }
     });
     const monthlyAportes = monthTx.filter((t) => t.type === 'aporte').reduce((s, t) => s + t.value, 0);
@@ -291,11 +291,11 @@ class InvestmentService {
 
     // Evolução últimos 12 meses
     const evolution = [];
-    const allValuations = await this.prisma.valuation.findMany({
+    const allValuations = await prisma.valuation.findMany({
       where: { user_id: userId },
       orderBy: { date: 'asc' }
     });
-    const allInvestments = await this.prisma.investment.findMany({
+    const allInvestments = await prisma.investment.findMany({
       where: { user_id: userId, archived: false },
       select: { id: true }
     });

@@ -39,5 +39,10 @@ async function authenticate(req, res, next) {
   }
 }
 
+const rlsMiddleware = require('./rls_middleware');
+
 module.exports = authenticate;
 module.exports.requireAuth = authenticate;
+// Combo: autentica + abre transação RLS com SET LOCAL app.current_user_id.
+// Usar em todas as rotas que tocam tabelas com RLS habilitada.
+module.exports.requireAuthWithRls = [authenticate, rlsMiddleware];

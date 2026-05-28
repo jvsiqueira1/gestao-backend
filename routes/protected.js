@@ -1,9 +1,9 @@
 const express = require('express');
-const authMiddleware = require('../middleware/auth_middleware');
+const { requireAuthWithRls } = require('../middleware/auth_middleware');
 
 const router = express.Router();
 
-router.get('/dashboard', authMiddleware, (req, res) => {
+router.get('/dashboard', requireAuthWithRls, (req, res) => {
   res.json({ user: req.user });
 });
 
