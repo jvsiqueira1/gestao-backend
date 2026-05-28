@@ -17,6 +17,6 @@ router.post('/register', authController.register);
 router.post('/login', authController.login);
 
 // Retorna dados do usuário autenticado
-router.get('/me', authMiddleware.requireAuth, authController.getCurrentUser);
+router.get('/me', authMiddleware.requireAuthWithRls, authController.getCurrentUser);
 
 module.exports = router;

@@ -38,7 +38,7 @@ model Category {
   expenses   Expense[]
   incomes    Income[]
 
-  @@unique([user_id, name])
+  @@unique([user_id, name, type])
   @@map("category")
 }
 

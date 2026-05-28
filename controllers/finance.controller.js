@@ -6,11 +6,11 @@ class FinanceController {
       const { month, year, fixed } = req.query;
       const userId = req.user.id;
 
-      const incomes = await financeService.getIncomes(userId, {
-        month,
-        year,
-        fixed
-      });
+      const incomes = await financeService.getIncomes(
+        userId,
+        { month, year, fixed },
+        req.prisma
+      );
       res.json(incomes);
     } catch (error) {
       console.error('Erro no controller de receitas:', error);
@@ -23,11 +23,11 @@ class FinanceController {
       const { month, year, fixed } = req.query;
       const userId = req.user.id;
 
-      const expenses = await financeService.getExpenses(userId, {
-        month,
-        year,
-        fixed
-      });
+      const expenses = await financeService.getExpenses(
+        userId,
+        { month, year, fixed },
+        req.prisma
+      );
       res.json(expenses);
     } catch (error) {
       console.error('Erro no controller de despesas:', error);
@@ -43,7 +43,8 @@ class FinanceController {
       const dashboardData = await financeService.getDashboardData(
         userId,
         month,
-        year
+        year,
+        req.prisma
       );
       res.json(dashboardData);
     } catch (error) {
@@ -63,7 +64,7 @@ class FinanceController {
           .json({ error: 'Valor e data são obrigatórios.' });
       }
 
-      const income = await financeService.createIncome(userId, incomeData);
+      const income = await financeService.createIncome(userId, incomeData, req.prisma);
       res.status(201).json(income);
     } catch (error) {
       console.error('Erro no controller de receitas:', error);
@@ -88,7 +89,7 @@ class FinanceController {
           .json({ error: 'Valor e data são obrigatórios.' });
       }
 
-      const expense = await financeService.createExpense(userId, expenseData);
+      const expense = await financeService.createExpense(userId, expenseData, req.prisma);
       res.status(201).json(expense);
     } catch (error) {
       console.error('Erro no controller de despesas:', error);
@@ -117,16 +118,21 @@ class FinanceController {
       } = req.body;
       const userId = req.user.id;
 
-      const income = await financeService.updateIncome(userId, id, {
-        description,
-        value,
-        date,
-        category_id,
-        isFixed,
-        recurrenceType,
-        startDate,
-        endDate
-      });
+      const income = await financeService.updateIncome(
+        userId,
+        id,
+        {
+          description,
+          value,
+          date,
+          category_id,
+          isFixed,
+          recurrenceType,
+          startDate,
+          endDate
+        },
+        req.prisma
+      );
       res.json(income);
     } catch (error) {
       console.error('Erro no controller de receitas:', error);
@@ -152,16 +158,21 @@ class FinanceController {
       } = req.body;
       const userId = req.user.id;
 
-      const expense = await financeService.updateExpense(userId, id, {
-        description,
-        value,
-        date,
-        category_id,
-        isFixed,
-        recurrenceType,
-        startDate,
-        endDate
-      });
+      const expense = await financeService.updateExpense(
+        userId,
+        id,
+        {
+          description,
+          value,
+          date,
+          category_id,
+          isFixed,
+          recurrenceType,
+          startDate,
+          endDate
+        },
+        req.prisma
+      );
       res.json(expense);
     } catch (error) {
       console.error('Erro no controller de despesas:', error);
@@ -177,7 +188,7 @@ class FinanceController {
       const { id } = req.params;
       const userId = req.user.id;
 
-      const result = await financeService.deleteIncome(userId, id);
+      const result = await financeService.deleteIncome(userId, id, req.prisma);
       res.json(result);
     } catch (error) {
       console.error('Erro no controller de receitas:', error);
@@ -193,7 +204,7 @@ class FinanceController {
       const { id } = req.params;
       const userId = req.user.id;
 
-      const result = await financeService.deleteExpense(userId, id);
+      const result = await financeService.deleteExpense(userId, id, req.prisma);
       res.json(result);
     } catch (error) {
       console.error('Erro no controller de despesas:', error);

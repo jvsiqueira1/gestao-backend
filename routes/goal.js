@@ -1,6 +1,5 @@
 const express = require('express');
-const prismaService = require('../services/prisma.service');
-const authMiddleware = require('../middleware/auth_middleware');
+const { requireAuthWithRls } = require('../middleware/auth_middleware');
 const { LRUCache } = require('lru-cache');
 
 const router = express.Router();
@@ -8,12 +7,12 @@ const router = express.Router();
 const goalsCache = new LRUCache({ max: 100, ttl: 1000 * 60 * 5 }); // 5 minutos
 
 // Listar metas do usuário
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', requireAuthWithRls, async (req, res) => {
   const cacheKey = `goals:${req.user.id}`;
   const cached = goalsCache.get(cacheKey);
   if (cached) return res.json(cached);
   try {
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
     const goals = await prisma.financialGoal.findMany({
       where: { user_id: req.user.id },
       orderBy: { created_at: 'desc' }
@@ -26,7 +25,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // Criar nova meta
-router.post('/', authMiddleware, async (req, res) => {
+router.post('/', requireAuthWithRls, async (req, res) => {
   const { name, description, target, deadline } = req.body;
   if (!name || !target) {
     return res
@@ -34,7 +33,7 @@ router.post('/', authMiddleware, async (req, res) => {
       .json({ error: 'Nome e valor objetivo são obrigatórios.' });
   }
   try {
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
     const goal = await prisma.financialGoal.create({
       data: {
         user_id: req.user.id,
@@ -52,11 +51,11 @@ router.post('/', authMiddleware, async (req, res) => {
 });
 
 // Atualizar meta
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', requireAuthWithRls, async (req, res) => {
   const { id } = req.params;
   const { name, description, target, deadline, status } = req.body;
   try {
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
     const goal = await prisma.financialGoal.update({
       where: { id: Number(id), user_id: req.user.id },
       data: {
@@ -75,10 +74,10 @@ router.put('/:id', authMiddleware, async (req, res) => {
 });
 
 // Deletar meta
-router.delete('/:id', authMiddleware, async (req, res) => {
+router.delete('/:id', requireAuthWithRls, async (req, res) => {
   const { id } = req.params;
   try {
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
     await prisma.financialGoal.delete({
       where: { id: Number(id), user_id: req.user.id }
     });
@@ -90,14 +89,14 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 });
 
 // Adicionar valor guardado à meta
-router.post('/:id/add', authMiddleware, async (req, res) => {
+router.post('/:id/add', requireAuthWithRls, async (req, res) => {
   const { id } = req.params;
   const { amount } = req.body;
   if (!amount) {
     return res.status(400).json({ error: 'Valor a adicionar é obrigatório.' });
   }
   try {
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
     const goal = await prisma.financialGoal.update({
       where: { id: Number(id), user_id: req.user.id },
       data: {

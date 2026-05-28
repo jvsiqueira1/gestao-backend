@@ -1,9 +1,9 @@
 const express = require('express');
-const authMiddleware = require('../middleware/auth_middleware');
+const { requireAuthWithRls } = require('../middleware/auth_middleware');
 const controller = require('../controllers/investment.controller');
 
 const router = express.Router();
-router.use(authMiddleware);
+router.use(requireAuthWithRls);
 
 router.get('/', controller.list.bind(controller));
 router.get('/summary', controller.summary.bind(controller));

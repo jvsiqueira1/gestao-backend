@@ -1,17 +1,16 @@
 const express = require('express');
-const prismaService = require('../services/prisma.service');
-const authMiddleware = require('../middleware/auth_middleware');
+const { requireAuthWithRls } = require('../middleware/auth_middleware');
 
 const router = express.Router();
 
-// Middleware de autenticação
-router.use(authMiddleware);
+// Auth + RLS por request
+router.use(requireAuthWithRls);
 
 // GET - Listar todas as rendas fixas do usuário
 router.get('/', async (req, res) => {
   try {
     const userId = req.user.id;
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
 
     const fixedIncomes = await prisma.income.findMany({
       where: {
@@ -39,7 +38,7 @@ router.get('/:id', async (req, res) => {
   try {
     const userId = req.user.id;
     const incomeId = parseInt(req.params.id);
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
 
     const fixedIncome = await prisma.income.findFirst({
       where: {
@@ -68,7 +67,7 @@ router.get('/:id/history', async (req, res) => {
   try {
     const userId = req.user.id;
     const incomeId = parseInt(req.params.id);
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
 
     // Verificar se a renda fixa existe e pertence ao usuário
     const fixedIncome = await prisma.income.findFirst({
@@ -147,7 +146,7 @@ router.post('/', async (req, res) => {
       startDate,
       endDate
     } = req.body;
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
 
     if (!description || !value || !recurrenceType) {
       return res.status(400).json({
@@ -193,7 +192,7 @@ router.put('/:id', async (req, res) => {
       startDate,
       endDate
     } = req.body;
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
 
     // Verificar se a renda fixa existe e pertence ao usuário
     const existingIncome = await prisma.income.findFirst({
@@ -236,7 +235,7 @@ router.delete('/:id', async (req, res) => {
   try {
     const userId = req.user.id;
     const incomeId = parseInt(req.params.id);
-    const prisma = prismaService.getClient();
+    const prisma = req.prisma;
 
     // Verificar se a renda fixa existe e pertence ao usuário
     const existingIncome = await prisma.income.findFirst({

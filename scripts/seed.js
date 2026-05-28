@@ -29,6 +29,10 @@ async function main() {
   });
   console.log(`Usuário ok: id=${user.id} email=${user.email}`);
 
+  // RLS: tabela category exige app.current_user_id setado.
+  // Script roda fora de transação encadeada, então SET (sem LOCAL) basta.
+  await prisma.$executeRawUnsafe(`SET app.current_user_id = ${user.id}`);
+
   const existing = await prisma.category.findMany({
     where: { user_id: user.id },
     select: { name: true, type: true }

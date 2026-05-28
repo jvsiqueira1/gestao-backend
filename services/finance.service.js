@@ -68,7 +68,7 @@ class FinanceService {
     return null;
   }
 
-  async getIncomes(userId, filters = {}) {
+  async getIncomes(userId, filters = {}, prisma = this.prisma) {
     const { month, year, fixed } = filters;
     const cacheKey = `income:${userId}:${month || ''}:${year || ''}:${fixed || ''}`;
     const cached = this.incomeCache.get(cacheKey);
@@ -91,7 +91,7 @@ class FinanceService {
         };
       }
 
-      const incomes = await this.prisma.income.findMany({
+      const incomes = await prisma.income.findMany({
         where,
         include: {
           category: {
@@ -101,7 +101,7 @@ class FinanceService {
         orderBy: { date: 'desc' }
       });
 
-      const fixedIncomes = await this.prisma.income.findMany({
+      const fixedIncomes = await prisma.income.findMany({
         where: {
           user_id: userId,
           isFixed: true,
@@ -194,7 +194,7 @@ class FinanceService {
     }
   }
 
-  async getExpenses(userId, filters = {}) {
+  async getExpenses(userId, filters = {}, prisma = this.prisma) {
     const { month, year, fixed } = filters;
     const cacheKey = `expense:${userId}:${month || ''}:${year || ''}:${fixed || ''}`;
     const cached = this.expenseCache.get(cacheKey);
@@ -217,7 +217,7 @@ class FinanceService {
         };
       }
 
-      const expenses = await this.prisma.expense.findMany({
+      const expenses = await prisma.expense.findMany({
         where,
         include: {
           category: {
@@ -227,7 +227,7 @@ class FinanceService {
         orderBy: { date: 'desc' }
       });
 
-      const fixedExpenses = await this.prisma.expense.findMany({
+      const fixedExpenses = await prisma.expense.findMany({
         where: {
           user_id: userId,
           isFixed: true,
@@ -320,7 +320,7 @@ class FinanceService {
     }
   }
 
-  async getDashboardData(userId, month, year) {
+  async getDashboardData(userId, month, year, prisma = this.prisma) {
     const cacheKey = `dashboard:${userId}:${month || ''}:${year || ''}`;
     const cached = this.dashboardCache.get(cacheKey);
     if (cached) return cached;
@@ -340,13 +340,13 @@ class FinanceService {
         1
       );
 
-      const user = await this.prisma.user.findUnique({
+      const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { created_at: true }
       });
 
       const [incomeResult, expenseResult] = await Promise.all([
-        this.prisma.income.aggregate({
+        prisma.income.aggregate({
           where: {
             user_id: userId,
             date: {
@@ -356,7 +356,7 @@ class FinanceService {
           },
           _sum: { value: true }
         }),
-        this.prisma.expense.aggregate({
+        prisma.expense.aggregate({
           where: {
             user_id: userId,
             date: {
@@ -371,8 +371,8 @@ class FinanceService {
       const yearStart = new Date(parseInt(currentYear), 0, 1);
       const yearEnd = new Date(parseInt(currentYear) + 1, 0, 1);
 
-      const monthlyData = await this.prisma.$queryRaw`
-        SELECT 
+      const monthlyData = await prisma.$queryRaw`
+        SELECT
           EXTRACT(MONTH FROM date) as month,
           SUM(CASE WHEN "table" = 'income' THEN value ELSE 0 END) as income,
           SUM(CASE WHEN "table" = 'expense' THEN value ELSE 0 END) as expense
@@ -385,12 +385,12 @@ class FinanceService {
         ORDER BY month
       `;
 
-      const categoryData = await this.prisma.$queryRaw`
-        SELECT 
+      const categoryData = await prisma.$queryRaw`
+        SELECT
           c.name as category_name,
           COALESCE(SUM(e.value), 0) as total_value
         FROM category c
-        LEFT JOIN expense e ON c.id = e.category_id 
+        LEFT JOIN expense e ON c.id = e.category_id
           AND e.user_id = ${userId}
           AND e.date >= ${startDate}
           AND e.date < ${endDate}
@@ -435,7 +435,7 @@ class FinanceService {
 
       let investmentSummary = null;
       try {
-        investmentSummary = await investmentService.getSummary(userId, currentMonth, currentYear);
+        investmentSummary = await investmentService.getSummary(userId, currentMonth, currentYear, prisma);
       } catch (err) {
         console.error('Erro ao buscar resumo de investimentos:', err);
       }
@@ -462,7 +462,7 @@ class FinanceService {
     }
   }
 
-  async createIncome(userId, incomeData) {
+  async createIncome(userId, incomeData, prisma = this.prisma) {
     try {
       const parsedDate = this.parseDateString(incomeData.date);
       const parsedStartDate = this.parseDateString(incomeData.startDate);
@@ -473,7 +473,7 @@ class FinanceService {
       }
 
       if (incomeData.category_id) {
-        const categoryExists = await this.prisma.category.findFirst({
+        const categoryExists = await prisma.category.findFirst({
           where: {
             id: parseInt(incomeData.category_id),
             user_id: userId
@@ -490,7 +490,7 @@ class FinanceService {
         incomeData.isFixed === 1 ||
         incomeData.isFixed === '1';
 
-      const income = await this.prisma.income.create({
+      const income = await prisma.income.create({
         data: {
           description: incomeData.description,
           value: parseFloat(incomeData.value),
@@ -538,7 +538,7 @@ class FinanceService {
     }
   }
 
-  async createExpense(userId, expenseData) {
+  async createExpense(userId, expenseData, prisma = this.prisma) {
     try {
       const parsedDate = this.parseDateString(expenseData.date);
       const parsedStartDate = this.parseDateString(expenseData.startDate);
@@ -549,7 +549,7 @@ class FinanceService {
       }
 
       if (expenseData.category_id) {
-        const categoryExists = await this.prisma.category.findFirst({
+        const categoryExists = await prisma.category.findFirst({
           where: {
             id: parseInt(expenseData.category_id),
             user_id: userId
@@ -566,7 +566,7 @@ class FinanceService {
         expenseData.isFixed === 1 ||
         expenseData.isFixed === '1';
 
-      const expense = await this.prisma.expense.create({
+      const expense = await prisma.expense.create({
         data: {
           description: expenseData.description,
           value: parseFloat(expenseData.value),
@@ -614,10 +614,10 @@ class FinanceService {
     }
   }
 
-  async updateIncome(userId, incomeId, incomeData) {
+  async updateIncome(userId, incomeId, incomeData, prisma = this.prisma) {
     try {
       // Primeiro, verificar se é uma receita fixa
-      const existingIncome = await this.prisma.income.findFirst({
+      const existingIncome = await prisma.income.findFirst({
         where: {
           id: parseInt(incomeId),
           user_id: userId
@@ -665,7 +665,7 @@ class FinanceService {
         }
       }
 
-      const income = await this.prisma.income.update({
+      const income = await prisma.income.update({
         where: {
           id: parseInt(incomeId),
           user_id: userId
@@ -692,10 +692,10 @@ class FinanceService {
     }
   }
 
-  async updateExpense(userId, expenseId, expenseData) {
+  async updateExpense(userId, expenseId, expenseData, prisma = this.prisma) {
     try {
       // Primeiro, verificar se é uma despesa fixa
-      const existingExpense = await this.prisma.expense.findFirst({
+      const existingExpense = await prisma.expense.findFirst({
         where: {
           id: parseInt(expenseId),
           user_id: userId
@@ -743,7 +743,7 @@ class FinanceService {
         }
       }
 
-      const expense = await this.prisma.expense.update({
+      const expense = await prisma.expense.update({
         where: {
           id: parseInt(expenseId),
           user_id: userId
@@ -770,9 +770,9 @@ class FinanceService {
     }
   }
 
-  async deleteIncome(userId, incomeId) {
+  async deleteIncome(userId, incomeId, prisma = this.prisma) {
     try {
-      await this.prisma.income.delete({
+      await prisma.income.delete({
         where: {
           id: parseInt(incomeId),
           user_id: userId
@@ -790,9 +790,9 @@ class FinanceService {
     }
   }
 
-  async deleteExpense(userId, expenseId) {
+  async deleteExpense(userId, expenseId, prisma = this.prisma) {
     try {
-      await this.prisma.expense.delete({
+      await prisma.expense.delete({
         where: {
           id: parseInt(expenseId),
           user_id: userId
